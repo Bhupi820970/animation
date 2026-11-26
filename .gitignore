@@ -1,0 +1,16 @@
+node_modules/
+out/
+.env
+.env.*
+*.log
+public/*.jpg
+public/*.jpeg
+public/*.png
+public/*.webp
+public/*.mp3
+public/*.wav
+public/*.txt
+public/current_video.json
+public/selected_story_id.txt
+__pycache__/
+*.pyc

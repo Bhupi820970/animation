@@ -8,26 +8,29 @@ import {
   staticFile,
   useCurrentFrame,
 } from 'remotion';
-import videoData from '../public/current_video.json';
 
 const SceneBlock = ({ scene }) => {
   const frame = useCurrentFrame();
   const dur = scene.durationInFrames;
 
-  // Smooth fade in & fade out
-  const opacity = interpolate(frame, [0, 15, dur - 15, dur], [0, 1, 1, 0], {
+  const opacity = interpolate(frame, [0, 15, Math.max(16, dur - 15), dur], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
-  // Camera movement based on scene effect
   let transform = 'scale(1.05)';
   if (scene.effect === 'zoom_in') {
     const scale = interpolate(frame, [0, dur], [1.0, 1.12]);
     transform = `scale(${scale})`;
+  } else if (scene.effect === 'zoom_out') {
+    const scale = interpolate(frame, [0, dur], [1.14, 1.0]);
+    transform = `scale(${scale})`;
   } else if (scene.effect === 'pan_right') {
-    const x = interpolate(frame, [0, dur], [-30, 30]);
-    transform = `scale(1.1) translateX(${x}px)`;
+    const x = interpolate(frame, [0, dur], [-40, 40]);
+    transform = `scale(1.12) translateX(${x}px)`;
+  } else if (scene.effect === 'pan_left') {
+    const x = interpolate(frame, [0, dur], [40, -40]);
+    transform = `scale(1.12) translateX(${x}px)`;
   } else if (scene.effect === 'shake') {
     const shakeX = Math.sin(frame * 1.5) * 4;
     const shakeY = Math.cos(frame * 1.8) * 3;
@@ -36,7 +39,6 @@ const SceneBlock = ({ scene }) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000', opacity }}>
-      {/* Animated Paper Cutout Scene */}
       <Img
         src={staticFile(scene.imageFile)}
         style={{
@@ -47,7 +49,6 @@ const SceneBlock = ({ scene }) => {
         }}
       />
 
-      {/* Dark Cinematic Vignette */}
       <AbsoluteFill
         style={{
           background:
@@ -55,27 +56,26 @@ const SceneBlock = ({ scene }) => {
         }}
       />
 
-      {/* Clean Bold Subtitles */}
       <div
         style={{
           position: 'absolute',
-          bottom: 50,
+          bottom: 80,
           width: '100%',
           display: 'flex',
           justifyContent: 'center',
-          padding: '0 80px',
+          padding: '0 120px',
         }}
       >
         <div
           style={{
             backgroundColor: 'rgba(0, 0, 0, 0.72)',
             color: '#f5ebd6',
-            fontSize: 34,
+            fontSize: 48,
             fontWeight: 'bold',
             fontFamily: 'sans-serif',
             textAlign: 'center',
-            padding: '14px 26px',
-            borderRadius: 10,
+            padding: '20px 36px',
+            borderRadius: 12,
             lineHeight: 1.35,
             textShadow: '2px 2px 4px #000',
           }}
@@ -84,24 +84,23 @@ const SceneBlock = ({ scene }) => {
         </div>
       </div>
 
-      {/* Synced Voiceover */}
       <Audio src={staticFile(scene.audioFile)} />
     </AbsoluteFill>
   );
 };
 
-export const StoryVideo = () => {
+export const StoryVideo = ({ scenes }) => {
   let currentStart = 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      {videoData.scenes.map((scene, index) => {
+      {(scenes || []).map((scene, index) => {
         const from = currentStart;
         currentStart += scene.durationInFrames;
 
         return (
           <Sequence
-            key={index}
+            key={`${scene.imageFile}-${index}`}
             from={from}
             durationInFrames={scene.durationInFrames}
           >

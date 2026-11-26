@@ -2,9 +2,14 @@ name: Auto Paper Cutout Video Factory
 
 on:
   schedule:
-    - cron: '30 4 * * *'   # Daily 10:00 AM IST
-    - cron: '30 13 * * *'  # Daily 7:00 PM IST
-  workflow_dispatch:       # Phone se manual test karne ke liye
+    - cron: '30 4 * * *'   # 10:00 AM IST
+    - cron: '0 8 * * *'    # 1:30 PM IST
+    - cron: '30 13 * * *'  # 7:00 PM IST
+  workflow_dispatch:
+
+concurrency:
+  group: animation-factory
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -12,6 +17,7 @@ permissions:
 jobs:
   build_video:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -19,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Setup Python & Edge-TTS
         run: |
@@ -30,22 +36,42 @@ jobs:
       - name: Install Node Packages
         run: npm install
 
+      - name: Validate stories.json
+        run: npm test
+
       - name: Generate Voice & Story Visuals
-        run: npm run prepare
+        id: prepare
+        env:
+          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+        run: npm run prepare-assets
 
       - name: Render Full HD Video (Remotion)
+        if: steps.prepare.outputs.has_story == 'true'
         run: npm run render
 
       - name: Save Finished MP4 Video
+        if: steps.prepare.outputs.has_story == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: youtube-ready-video
           path: out/final_video.mp4
+          if-no-files-found: error
 
-      - name: Mark Story as Done in GitHub
+      - name: Upload to YouTube
+        if: steps.prepare.outputs.has_story == 'true'
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY }}
+        run: python3 scripts/upload_youtube.py
+
+      - name: Mark Story as Done
+        if: steps.prepare.outputs.has_story == 'true'
         run: |
-          git config user.name "Auto Video Bot"
-          git config user.email "bot@github.com"
+          npm run mark-done
+          git config user.name "bibi-bot"
+          git config user.email "bot@users.noreply.github.com"
           git add stories.json
-          git commit -m "Marked story as done" || exit 0
+          git commit -m "Mark story ${{ steps.prepare.outputs.story_id }} as done" || exit 0
           git push

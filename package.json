@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prepare": "node scripts/prepare_assets.mjs",
-    "render": "npx remotion render src/index.js StoryVideo out/final_video.mp4"
+    "prepare-assets": "node scripts/prepare_assets.mjs",
+    "render": "npx remotion render src/index.js StoryVideo out/final_video.mp4 --props=public/current_video.json",
+    "mark-done": "node scripts/mark_story_done.mjs",
+    "validate": "node scripts/validate_stories.mjs",
+    "test": "node scripts/validate_stories.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.220",
