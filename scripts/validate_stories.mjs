@@ -2,7 +2,15 @@ import fs from 'fs';
 import path from 'path';
 
 const STATUSES = new Set(['pending', 'done', 'processing']);
-const EFFECTS = new Set(['zoom_in', 'zoom_out', 'pan_right', 'pan_left', 'shake']);
+const EFFECTS = new Set([
+  'zoom_in',
+  'zoom_out',
+  'pan_right',
+  'pan_left',
+  'shake',
+  'handheld',
+  'push_up',
+]);
 const storiesPath = path.resolve('./stories.json');
 
 function fail(message) {
@@ -49,7 +57,15 @@ for (const [index, story] of stories.entries()) {
   if (!Array.isArray(story.scenes) || story.scenes.length === 0) {
     fail(`${label} (${story.id}) needs a non-empty "scenes" array`);
   }
-  if (story.status === 'pending') pending += 1;
+  if (story.status === 'pending') {
+    pending += 1;
+    if (story.id !== 'story_01' && story.scenes.length < 30) {
+      fail(`${label} (${story.id}) pending feature stories need at least 30 scenes`);
+    }
+    if (story.id !== 'story_01' && story.scenes.length > 45) {
+      fail(`${label} (${story.id}) has more than 45 scenes`);
+    }
+  }
 
   for (const [sceneIndex, scene] of story.scenes.entries()) {
     const sceneLabel = `${label} scene[${sceneIndex}]`;
@@ -61,7 +77,7 @@ for (const [index, story] of stories.entries()) {
     }
     if (scene.effect && !EFFECTS.has(scene.effect)) {
       fail(
-        `${sceneLabel} effect "${scene.effect}" is invalid (use zoom_in, zoom_out, pan_right, pan_left, or shake)`,
+        `${sceneLabel} effect "${scene.effect}" is invalid (use zoom_in, zoom_out, pan_right, pan_left, shake, handheld, or push_up)`,
       );
     }
   }

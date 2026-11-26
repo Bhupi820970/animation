@@ -4,13 +4,14 @@
   "type": "module",
   "scripts": {
     "prepare-assets": "node scripts/prepare_assets.mjs",
-    "render": "npx remotion render src/index.js StoryVideo out/final_video.mp4 --props=public/current_video.json",
+    "render": "npx remotion render src/index.js StoryVideo out/final_video.mp4 --props=public/current_video.json --crf=16 --x264-preset=medium --pixel-format=yuv420p",
     "mark-done": "node scripts/mark_story_done.mjs",
     "validate": "node scripts/validate_stories.mjs",
     "test": "node scripts/validate_stories.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.220",
+    "@remotion/google-fonts": "4.0.220",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.220"

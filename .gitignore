@@ -14,3 +14,4 @@ public/current_video.json
 public/selected_story_id.txt
 __pycache__/
 *.pyc
+public/*.json

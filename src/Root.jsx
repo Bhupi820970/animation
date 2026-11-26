@@ -1,11 +1,19 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { StoryVideo } from './StoryVideo.jsx';
+import { StoryVideo, calculateStoryFrames } from './StoryVideo.jsx';
 
 const emptyProps = {
   title: '',
   description: '',
   storyId: '',
+  genre: '',
+  titleDurationInFrames: 60,
+  endCardDurationInFrames: 225,
+  overlapFrames: 12,
+  musicFile: 'music.mp3',
+  grainFile: 'grain.jpg',
+  imageSource: '',
+  fallbackScenes: [],
   scenes: [],
 };
 
@@ -19,15 +27,10 @@ export const RemotionRoot = () => {
       width={1920}
       height={1080}
       defaultProps={emptyProps}
-      calculateMetadata={({ props }) => {
-        const totalFrames = (props.scenes || []).reduce(
-          (sum, scene) => sum + (scene.durationInFrames || 0),
-          0,
-        );
-        return {
-          durationInFrames: totalFrames || 30,
-        };
-      }}
+      timeoutInMilliseconds={180000}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: calculateStoryFrames(props) || 30,
+      })}
     />
   );
 };

@@ -272,18 +272,42 @@ async function createSceneImage(prompt, destPath, seed) {
   return 'local';
 }
 
-function generateVoice(narration, audioPath, textPath) {
-  fs.writeFileSync(textPath, narration, 'utf-8');
+const PROMPT_BAN =
+  'Absolutely no text, no letters, no typography, no captions, no subtitles, no watermarks, no logos, no signatures, no UI, no writing of any kind.';
+
+function buildVisualPrompt(story, scene) {
+  return [story.artStyle, story.character, scene.visualPrompt, PROMPT_BAN]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function inferParticles(text) {
+  const value = (text || '').toLowerCase();
+  if (/(rain|thunderstorm|downpour)/.test(value)) return 'rain';
+  if (/(ember|fire|flame|ash|burn|lantern)/.test(value)) return 'embers';
+  return 'dust';
+}
+
+function inferSfx(effect, index) {
+  if (effect === 'shake' || effect === 'handheld') return 'sfx_boom.mp3';
+  if (index === 0) return 'sfx_paper.mp3';
+  if (index % 4 === 0) return 'sfx_whoosh.mp3';
+  return null;
+}
+
+function generateVoice(narration, audioPath, wordsPath, voice) {
   execFileSync(
-    'edge-tts',
+    'python3',
     [
-      '--voice',
-      'en-US-ChristopherNeural',
-      '--rate=-5%',
-      '--file',
-      textPath,
-      '--write-media',
+      'scripts/tts_scene.py',
+      '--text',
+      narration,
+      '--out',
       audioPath,
+      '--words',
+      wordsPath,
+      '--voice',
+      voice,
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -291,6 +315,16 @@ function generateVoice(narration, audioPath, textPath) {
   if (size < 1000) {
     throw new Error(`Voice file is too small (${size} bytes)`);
   }
+}
+
+function wordsToFrames(wordsPath) {
+  if (!fs.existsSync(wordsPath)) return [];
+  const words = JSON.parse(fs.readFileSync(wordsPath, 'utf-8'));
+  return words.map((word) => ({
+    word: word.word,
+    from: Math.max(0, Math.round(word.start * 30)),
+    to: Math.max(1, Math.round(word.end * 30)),
+  }));
 }
 
 function audioDurationSeconds(audioPath) {
@@ -331,40 +365,76 @@ writeOutput('story_id', story.id);
 fs.writeFileSync(path.join(publicDir, 'selected_story_id.txt'), `${story.id}\n`);
 
 const processedScenes = [];
-let processedSource = 'unknown';
+const sourceCounts = { pollinations: 0, gemini: 0, local: 0 };
+const fallbackScenes = [];
+const voice = story.voice || 'en-GB-RyanNeural';
 
 for (let i = 0; i < story.scenes.length; i++) {
   const scene = story.scenes[i];
   const audioFile = `audio_${i}.mp3`;
   const imageFile = `image_${i}.jpg`;
-  const textFile = `narration_${i}.txt`;
+  const wordsFile = `words_${i}.json`;
   const audioPath = path.join(publicDir, audioFile);
   const imagePath = path.join(publicDir, imageFile);
-  const textPath = path.join(publicDir, textFile);
+  const wordsPath = path.join(publicDir, wordsFile);
 
   console.log(`Generating voice for scene ${i + 1}/${story.scenes.length}...`);
-  generateVoice(scene.narration, audioPath, textPath);
-  const durationSec = audioDurationSeconds(audioPath) + 0.6;
+  generateVoice(scene.narration, audioPath, wordsPath, voice);
+  const durationSec = audioDurationSeconds(audioPath) + 0.35;
 
   console.log(`Generating image for scene ${i + 1}/${story.scenes.length}...`);
-  const source = await createSceneImage(scene.visualPrompt, imagePath, Date.now() + i * 17);
-  processedSource = source;
-  if (source === 'pollinations' && i < story.scenes.length - 1) await sleep(2000);
+  const prompt = buildVisualPrompt(story, scene);
+  const source = await createSceneImage(prompt, imagePath, Date.now() + i * 17);
+  sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+  if (source === 'local') fallbackScenes.push(i);
+  if (source === 'pollinations' && i < story.scenes.length - 1) await sleep(2200);
 
+  const effect = scene.effect || 'zoom_in';
   processedScenes.push({
     narration: scene.narration,
-    effect: scene.effect || 'zoom_in',
+    effect,
     audioFile,
     imageFile,
-    durationInFrames: Math.max(45, Math.ceil(durationSec * 30)),
+    words: wordsToFrames(wordsPath),
+    particles: scene.particles || inferParticles(`${scene.visualPrompt} ${scene.narration}`),
+    sfxFile: inferSfx(effect, i),
+    imageSource: source,
+    durationInFrames: Math.max(60, Math.ceil(durationSec * 30)),
   });
 }
+
+const sceneSeconds = processedScenes.reduce((sum, scene) => sum + scene.durationInFrames / 30, 0);
+const musicSeconds = Math.max(90, Math.ceil(sceneSeconds + 20));
+console.log(`Building original CC0 soundtrack (${musicSeconds}s) and film grain...`);
+execFileSync(
+  'python3',
+  [
+    'scripts/make_soundtrack.py',
+    '--out-dir',
+    publicDir,
+    '--seconds',
+    String(musicSeconds),
+    '--seed',
+    String(Math.abs(String(story.id || 'story').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0))),
+  ],
+  { stdio: ['inherit', 'inherit', 'inherit'] },
+);
 
 const manifest = {
   title: story.title,
   description: story.description || '',
   storyId: story.id,
-  imageSource: processedSource,
+  genre: story.genre || '',
+  imageSource: Object.entries(sourceCounts)
+    .filter(([, count]) => count > 0)
+    .map(([name, count]) => `${name}:${count}`)
+    .join(','),
+  fallbackScenes,
+  titleDurationInFrames: 60,
+  endCardDurationInFrames: 225,
+  overlapFrames: 12,
+  musicFile: 'music.mp3',
+  grainFile: 'grain.jpg',
   scenes: processedScenes,
 };
 
@@ -373,4 +443,6 @@ fs.writeFileSync(
   `${JSON.stringify(manifest, null, 2)}\n`,
 );
 
-console.log('All assets prepared successfully. Story will be marked done only after a successful render.');
+console.log(
+  `All assets prepared successfully. Image sources: ${manifest.imageSource || 'none'}. Story will be marked done only after a successful render.`,
+);

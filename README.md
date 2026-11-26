@@ -60,6 +60,17 @@ Without the YouTube secrets, videos still get built and saved as workflow artifa
 
 If both image APIs fail, the run still finishes using a simple local paper-cutout drawing. That fallback has no watermark, but it is much simpler than Flux or Gemini art. Add `POLLINATIONS_API_KEY` or `GEMINI_API_KEY` for better pictures.
 
+
+Each full-length story should also include:
+
+- `genre`: a short label shown on the title card
+- `artStyle`: one locked visual style, repeated into every image prompt
+- `character`: a locked description of the main character, used in every prompt
+- `voice`: an Edge-TTS voice name, optional
+- 30-45 scenes for a 3-4 minute film
+
+The factory prepends the style and character, and always adds a ban on text, letters, typography, captions, watermarks and logos.
+
 ## Local commands (on any computer with Node, ffmpeg, and edge-tts)
 
 ```bash
