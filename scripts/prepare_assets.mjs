@@ -48,14 +48,31 @@ function authHeaders() {
   return headers;
 }
 
+function safeSeed(seed) {
+  const n = Number(seed);
+  if (!Number.isFinite(n)) return 1;
+  const max = 2147483647;
+  return ((n % max) + max) % max;
+}
+
 function imageUrlCandidates(prompt, seed, width, height, model) {
   const encoded = encodeURIComponent(prompt);
-  const query = `width=${width}&height=${height}&nologo=true&model=${model}&seed=${seed}`;
+  const seedValue = safeSeed(seed);
+  const officialQuery = `width=${width}&height=${height}&model=${encodeURIComponent(model)}&seed=${seedValue}`;
   const urls = [];
   if ((process.env.POLLINATIONS_API_KEY || '').trim()) {
-    urls.push({ host: 'gen.pollinations.ai', model, url: `https://gen.pollinations.ai/image/${encoded}?${query}` });
+    // Official API rejects unknown query params such as nologo, and seed must be <= 2147483647.
+    urls.push({
+      host: 'gen.pollinations.ai',
+      model,
+      url: `https://gen.pollinations.ai/image/${encoded}?${officialQuery}`,
+    });
   }
-  urls.push({ host: 'image.pollinations.ai', model, url: `https://image.pollinations.ai/prompt/${encoded}?${query}` });
+  urls.push({
+    host: 'image.pollinations.ai',
+    model,
+    url: `https://image.pollinations.ai/prompt/${encoded}?${officialQuery}&nologo=true`,
+  });
   return urls;
 }
 
@@ -102,7 +119,7 @@ function saveImageBuffer(buf, destPath) {
 async function tryPollinationsImage(prompt, destPath, seed) {
   let lastError = 'unknown error';
   const hasKey = Boolean((process.env.POLLINATIONS_API_KEY || '').trim());
-  const models = hasKey ? ['flux', 'turbo'] : ['flux'];
+  const models = hasKey ? ['flux'] : ['flux'];
   const width = 1024;
   const height = 576;
 
