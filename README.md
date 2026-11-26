@@ -49,13 +49,16 @@ Add these in the repo's GitHub Secrets if you want uploads and more reliable ima
 
 | Secret name | Required? | What it is for |
 |---|---|---|
-| `POLLINATIONS_API_KEY` | Recommended | Image generation. The free public API often returns errors or a watermark. A key from https://enter.pollinations.ai is more reliable and can request no logo. |
+| `POLLINATIONS_API_KEY` | Recommended | Image generation. From GitHub Actions the free public API often returns HTTP 402 (payment required) or a watermark. A key from https://enter.pollinations.ai is more reliable and can request no logo. |
+| `GEMINI_API_KEY` | Optional fallback | Used for scene images if Pollinations fails. Add a Gemini image-capable key; do not reuse keys by putting them in the repo. |
 | `YOUTUBE_CLIENT_ID` | For upload | Google Cloud OAuth client id for the YouTube Data API. |
 | `YOUTUBE_CLIENT_SECRET` | For upload | Google Cloud OAuth client secret. |
 | `YOUTUBE_REFRESH_TOKEN` | For upload | OAuth refresh token for the YouTube channel. |
 | `YOUTUBE_PRIVACY` | Optional | `private` (default), `unlisted`, or `public`. |
 
 Without the YouTube secrets, videos still get built and saved as workflow artifacts.
+
+If both image APIs fail, the run still finishes using a simple local paper-cutout drawing. That fallback has no watermark, but it is much simpler than Flux or Gemini art. Add `POLLINATIONS_API_KEY` or `GEMINI_API_KEY` for better pictures.
 
 ## Local commands (on any computer with Node, ffmpeg, and edge-tts)
 

@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg python3-pip
-          pip install edge-tts
+          pip install edge-tts pillow
 
       - name: Install Node Packages
         run: npm install
@@ -43,6 +43,7 @@ jobs:
         id: prepare
         env:
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npm run prepare-assets
 
       - name: Render Full HD Video (Remotion)

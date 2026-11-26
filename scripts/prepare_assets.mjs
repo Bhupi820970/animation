@@ -4,7 +4,7 @@ import { execFileSync } from 'child_process';
 
 const storiesPath = './stories.json';
 const publicDir = './public';
-const MAX_IMAGE_ATTEMPTS = 8;
+const MAX_IMAGE_ATTEMPTS = 3;
 const MIN_IMAGE_BYTES = 8000;
 
 function writeOutput(name, value) {
@@ -67,15 +67,37 @@ function convertToJpeg(srcPath, destPath) {
   );
 }
 
-async function downloadValidImage(prompt, destPath, seed) {
+function briefApiError(buf, status) {
+  const raw = buf.toString('utf8').slice(0, 240).replace(/\s+/g, ' ');
+  return `HTTP ${status}: ${raw}`;
+}
+
+function saveImageBuffer(buf, destPath) {
+  if (isJpeg(buf)) {
+    fs.writeFileSync(destPath, buf);
+  } else {
+    const tmpPath = `${destPath}.tmp`;
+    fs.writeFileSync(tmpPath, buf);
+    convertToJpeg(tmpPath, destPath);
+    fs.unlinkSync(tmpPath);
+  }
+  const written = fs.readFileSync(destPath);
+  if (written.length < MIN_IMAGE_BYTES || !isJpeg(written)) {
+    return false;
+  }
+  console.log(`Saved ${path.basename(destPath)} (${written.length} bytes)`);
+  return true;
+}
+
+async function tryPollinationsImage(prompt, destPath, seed) {
   let lastError = 'unknown error';
   const sizes = [
-    [1920, 1080],
+    [1024, 576],
     [1280, 720],
   ];
 
   for (let attempt = 1; attempt <= MAX_IMAGE_ATTEMPTS; attempt++) {
-    const [width, height] = sizes[attempt === 1 ? 0 : Math.min(1, sizes.length - 1)];
+    const [width, height] = sizes[Math.min(attempt - 1, sizes.length - 1)];
     const urls = imageUrlCandidates(prompt, seed + attempt, width, height);
 
     for (const url of urls) {
@@ -86,18 +108,24 @@ async function downloadValidImage(prompt, destPath, seed) {
         const retryAfterSec = Number(retryAfterHeader);
         const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
           ? retryAfterSec * 1000
-          : Math.min(15000, 4000 * attempt);
+          : 4000 * attempt;
+
+        if (res.status === 402) {
+          lastError = briefApiError(buf, res.status);
+          console.log(`Pollinations needs a paid/API key (${lastError}). Skipping further retries.`);
+          return false;
+        }
 
         if (res.status === 503 || res.status === 429) {
-          lastError = `HTTP ${res.status}`;
+          lastError = briefApiError(buf, res.status);
           console.log(`Image API busy (${res.status}) on attempt ${attempt}, waiting ${Math.round(waitMs / 1000)}s`);
           await sleep(waitMs);
           break;
         }
 
         if (!res.ok) {
-          lastError = `HTTP ${res.status}`;
-          console.log(`Image API returned HTTP ${res.status} on attempt ${attempt}`);
+          lastError = briefApiError(buf, res.status);
+          console.log(`Image API returned ${lastError} on attempt ${attempt}`);
           continue;
         }
 
@@ -107,32 +135,103 @@ async function downloadValidImage(prompt, destPath, seed) {
           continue;
         }
 
-        if (isJpeg(buf)) {
-          fs.writeFileSync(destPath, buf);
-        } else {
-          const tmpPath = `${destPath}.tmp`;
-          fs.writeFileSync(tmpPath, buf);
-          convertToJpeg(tmpPath, destPath);
-          fs.unlinkSync(tmpPath);
-        }
-
-        const written = fs.readFileSync(destPath);
-        if (written.length < MIN_IMAGE_BYTES || !isJpeg(written)) {
-          lastError = 'converted file was not a valid JPEG';
-          continue;
-        }
-        console.log(`Saved ${path.basename(destPath)} (${written.length} bytes)`);
-        return;
+        if (saveImageBuffer(buf, destPath)) return true;
+        lastError = 'converted file was not a valid JPEG';
       } catch (err) {
         lastError = err.message || String(err);
         console.log(`Image download failed on attempt ${attempt}: ${lastError}`);
       }
     }
-
-    await sleep(Math.min(15000, 4000 * attempt));
   }
 
-  throw new Error(`Could not generate a valid scene image after ${MAX_IMAGE_ATTEMPTS} attempts (${lastError})`);
+  console.log(`Pollinations did not return a valid image (${lastError})`);
+  return false;
+}
+
+async function tryGeminiImage(prompt, destPath) {
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  if (!key) return false;
+
+  const models = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
+  for (const model of models) {
+    try {
+      console.log(`Trying Gemini image model ${model}...`);
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: `${prompt}\nNo text, no watermark, no logo, no caption.`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ['IMAGE'],
+              imageConfig: { aspectRatio: '16:9', imageSize: '1K' },
+            },
+          }),
+        },
+      );
+      const payload = await res.json();
+      if (!res.ok) {
+        const message = payload?.error?.message || `HTTP ${res.status}`;
+        console.log(`Gemini ${model} failed: ${message}`);
+        continue;
+      }
+      const parts = payload?.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((part) => part.inlineData?.data || part.inline_data?.data);
+      const b64 = imagePart?.inlineData?.data || imagePart?.inline_data?.data;
+      if (!b64) {
+        console.log(`Gemini ${model} returned no image data`);
+        continue;
+      }
+      const buf = Buffer.from(b64, 'base64');
+      if (isImageBuffer(buf) && saveImageBuffer(buf, destPath)) return true;
+      console.log(`Gemini ${model} returned a non-image payload`);
+    } catch (err) {
+      console.log(`Gemini ${model} failed: ${err.message || String(err)}`);
+    }
+  }
+  return false;
+}
+
+function renderLocalImage(prompt, destPath, seed) {
+  console.log('Using local paper-cutout fallback for this scene');
+  execFileSync(
+    'python3',
+    [
+      'scripts/local_scene.py',
+      '--prompt',
+      prompt,
+      '--out',
+      destPath,
+      '--seed',
+      String(seed),
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const written = fs.readFileSync(destPath);
+  if (written.length < MIN_IMAGE_BYTES || !isJpeg(written)) {
+    throw new Error('Local fallback did not write a valid JPEG');
+  }
+  console.log(`Saved ${path.basename(destPath)} (${written.length} bytes, local fallback)`);
+}
+
+async function createSceneImage(prompt, destPath, seed) {
+  if (await tryPollinationsImage(prompt, destPath, seed)) return 'pollinations';
+  if (await tryGeminiImage(prompt, destPath)) return 'gemini';
+  renderLocalImage(prompt, destPath, seed);
+  return 'local';
 }
 
 function generateVoice(narration, audioPath, textPath) {
@@ -194,6 +293,7 @@ writeOutput('story_id', story.id);
 fs.writeFileSync(path.join(publicDir, 'selected_story_id.txt'), `${story.id}\n`);
 
 const processedScenes = [];
+let processedSource = 'unknown';
 
 for (let i = 0; i < story.scenes.length; i++) {
   const scene = story.scenes[i];
@@ -209,9 +309,9 @@ for (let i = 0; i < story.scenes.length; i++) {
   const durationSec = audioDurationSeconds(audioPath) + 0.6;
 
   console.log(`Generating image for scene ${i + 1}/${story.scenes.length}...`);
-  await downloadValidImage(scene.visualPrompt, imagePath, Date.now() + i * 17);
-  // Small gap so the free image API is less likely to throttle the next scene.
-  if (i < story.scenes.length - 1) await sleep(2000);
+  const source = await createSceneImage(scene.visualPrompt, imagePath, Date.now() + i * 17);
+  processedSource = source;
+  if (source === 'pollinations' && i < story.scenes.length - 1) await sleep(2000);
 
   processedScenes.push({
     narration: scene.narration,
@@ -226,6 +326,7 @@ const manifest = {
   title: story.title,
   description: story.description || '',
   storyId: story.id,
+  imageSource: processedSource,
   scenes: processedScenes,
 };
 
