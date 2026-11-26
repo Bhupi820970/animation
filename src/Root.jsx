@@ -1,6 +1,6 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { StoryVideo } from './StoryVideo';
+import { StoryVideo } from './StoryVideo.jsx';
 import videoData from '../public/current_video.json';
 
 export const RemotionRoot = () => {
