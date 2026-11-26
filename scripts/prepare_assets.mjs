@@ -48,14 +48,14 @@ function authHeaders() {
   return headers;
 }
 
-function imageUrlCandidates(prompt, seed, width, height) {
+function imageUrlCandidates(prompt, seed, width, height, model) {
   const encoded = encodeURIComponent(prompt);
-  const query = `width=${width}&height=${height}&nologo=true&model=flux&seed=${seed}`;
+  const query = `width=${width}&height=${height}&nologo=true&model=${model}&seed=${seed}`;
   const urls = [];
   if ((process.env.POLLINATIONS_API_KEY || '').trim()) {
-    urls.push(`https://gen.pollinations.ai/image/${encoded}?${query}`);
+    urls.push({ host: 'gen.pollinations.ai', model, url: `https://gen.pollinations.ai/image/${encoded}?${query}` });
   }
-  urls.push(`https://image.pollinations.ai/prompt/${encoded}?${query}`);
+  urls.push({ host: 'image.pollinations.ai', model, url: `https://image.pollinations.ai/prompt/${encoded}?${query}` });
   return urls;
 }
 
@@ -68,8 +68,18 @@ function convertToJpeg(srcPath, destPath) {
 }
 
 function briefApiError(buf, status) {
-  const raw = buf.toString('utf8').slice(0, 240).replace(/\s+/g, ' ');
-  return `HTTP ${status}: ${raw}`;
+  if (isImageBuffer(buf)) {
+    return `HTTP ${status} (image body, ${buf.length} bytes)`;
+  }
+  try {
+    const parsed = JSON.parse(buf.toString('utf8'));
+    const message = parsed?.error?.message || parsed?.message || parsed?.error || parsed;
+    const text = typeof message === 'string' ? message : JSON.stringify(message);
+    return `HTTP ${status}: ${text.slice(0, 180)}`;
+  } catch {
+    const raw = buf.toString('utf8').replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+    return `HTTP ${status}: ${raw.slice(0, 180) || 'non-text body'}`;
+  }
 }
 
 function saveImageBuffer(buf, destPath) {
@@ -91,55 +101,66 @@ function saveImageBuffer(buf, destPath) {
 
 async function tryPollinationsImage(prompt, destPath, seed) {
   let lastError = 'unknown error';
-  const sizes = [
-    [1024, 576],
-    [1280, 720],
-  ];
+  const hasKey = Boolean((process.env.POLLINATIONS_API_KEY || '').trim());
+  const models = hasKey ? ['flux', 'turbo'] : ['flux'];
+  const width = 1024;
+  const height = 576;
 
-  for (let attempt = 1; attempt <= MAX_IMAGE_ATTEMPTS; attempt++) {
-    const [width, height] = sizes[Math.min(attempt - 1, sizes.length - 1)];
-    const urls = imageUrlCandidates(prompt, seed + attempt, width, height);
+  console.log(`Trying Pollinations${hasKey ? ' with API key' : ' without API key'}; models: ${models.join(', ')}`);
 
-    for (const url of urls) {
+  for (const model of models) {
+    const candidates = imageUrlCandidates(prompt, seed, width, height, model);
+    for (const candidate of candidates) {
       try {
-        const res = await fetch(url, { headers: authHeaders() });
+        console.log(`Pollinations request: host=${candidate.host} model=${model}`);
+        const res = await fetch(candidate.url, { headers: authHeaders() });
         const buf = Buffer.from(await res.arrayBuffer());
-        const retryAfterHeader = res.headers.get('retry-after');
-        const retryAfterSec = Number(retryAfterHeader);
-        const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-          ? retryAfterSec * 1000
-          : 4000 * attempt;
+        lastError = briefApiError(buf, res.status);
 
-        if (res.status === 402) {
-          lastError = briefApiError(buf, res.status);
-          console.log(`Pollinations needs a paid/API key (${lastError}). Skipping further retries.`);
-          return false;
+        if (res.status === 401 || res.status === 402) {
+          console.log(`Pollinations ${candidate.host} model=${model} ${lastError}. Not making any payment; trying the next free option.`);
+          continue;
         }
 
         if (res.status === 503 || res.status === 429) {
-          lastError = briefApiError(buf, res.status);
-          console.log(`Image API busy (${res.status}) on attempt ${attempt}, waiting ${Math.round(waitMs / 1000)}s`);
+          const retryAfterSec = Number(res.headers.get('retry-after'));
+          const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 5000;
+          console.log(`Pollinations busy (${lastError}), waiting ${Math.round(waitMs / 1000)}s and retrying once`);
           await sleep(waitMs);
-          break;
+          const retry = await fetch(candidate.url, { headers: authHeaders() });
+          const retryBuf = Buffer.from(await retry.arrayBuffer());
+          lastError = briefApiError(retryBuf, retry.status);
+          if (retry.status === 401 || retry.status === 402) {
+            console.log(`Pollinations ${candidate.host} model=${model} ${lastError}. Not making any payment; trying the next free option.`);
+            continue;
+          }
+          if (retry.ok && isImageBuffer(retryBuf) && retryBuf.length >= MIN_IMAGE_BYTES && saveImageBuffer(retryBuf, destPath)) {
+            console.log(`Pollinations succeeded on retry: host=${candidate.host} model=${model}`);
+            return true;
+          }
+          console.log(`Pollinations retry failed (${lastError})`);
+          continue;
         }
 
         if (!res.ok) {
-          lastError = briefApiError(buf, res.status);
-          console.log(`Image API returned ${lastError} on attempt ${attempt}`);
+          console.log(`Pollinations ${candidate.host} model=${model} ${lastError}`);
           continue;
         }
 
         if (!isImageBuffer(buf) || buf.length < MIN_IMAGE_BYTES) {
           lastError = `invalid image body (${buf.length} bytes)`;
-          console.log(`Image API returned a non-image on attempt ${attempt}, retrying`);
+          console.log(`Pollinations ${candidate.host} model=${model} returned a non-image`);
           continue;
         }
 
-        if (saveImageBuffer(buf, destPath)) return true;
+        if (saveImageBuffer(buf, destPath)) {
+          console.log(`Pollinations succeeded: host=${candidate.host} model=${model}`);
+          return true;
+        }
         lastError = 'converted file was not a valid JPEG';
       } catch (err) {
         lastError = err.message || String(err);
-        console.log(`Image download failed on attempt ${attempt}: ${lastError}`);
+        console.log(`Pollinations ${candidate.host} model=${model} failed: ${lastError}`);
       }
     }
   }
