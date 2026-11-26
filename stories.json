@@ -1,0 +1,24 @@
+[
+  {
+    "id": "story_01",
+    "status": "pending",
+    "title": "The Lighthouse That Never Turned Off",
+    "scenes": [
+      {
+        "narration": "In the winter of 1984, a solitary lighthouse keeper vanished from an island forty miles off the coast.",
+        "visualPrompt": "2D layered paper cutout art style, dark stormy ocean, tall glowing lighthouse on a rocky cliff, deep shadows, cinematic lighting, atmospheric, no text",
+        "effect": "zoom_in"
+      },
+      {
+        "narration": "When the rescue boat arrived three days later, the coffee on his desk was still warm, and the heavy iron door was locked from the inside.",
+        "visualPrompt": "2D layered paper cutout art style, dim wooden lighthouse interior, steaming coffee mug on a desk, heavy locked iron door, eerie moonlight through window, no text",
+        "effect": "pan_right"
+      },
+      {
+        "narration": "The only clue left behind was a single sentence carved into the wall: Do not answer when the foghorn calls back.",
+        "visualPrompt": "2D layered paper cutout art style, mysterious silhouette of a man holding a flickering lantern in thick dark fog, haunting shadows, cinematic, no text",
+        "effect": "shake"
+      }
+    ]
+  }
+]
