@@ -8,7 +8,7 @@ const emptyProps = {
   storyId: '',
   genre: '',
   titleDurationInFrames: 60,
-  endCardDurationInFrames: 225,
+  endCardDurationInFrames: 150,
   overlapFrames: 12,
   musicFile: 'music.mp3',
   grainFile: 'grain.jpg',

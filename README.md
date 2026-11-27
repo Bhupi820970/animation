@@ -8,8 +8,8 @@ This pipeline makes narrated illustrated videos (still images with camera moves)
 
 1. The workflow starts three times a day (10:00 AM, 1:30 PM, and 7:00 PM IST) or when you click **Run workflow**.
 2. It picks the first story with `"status": "pending"`.
-3. It generates a voice for each scene and a picture from the scene prompt.
-4. Remotion renders `out/final_video.mp4` and saves it as the `youtube-ready-video` artifact.
+3. It builds a fixed paper-cutout puppet for each main character (one sheet, reused in every scene), a voice for each scene, and a background with no people and no text.
+4. Remotion composites the same character asset over the backgrounds, then renders `out/final_video.mp4` and saves it as the `youtube-ready-video` artifact. Finished films are capped at 3-4 minutes.
 5. If YouTube secrets are set, it uploads the video. If they are not set, upload is skipped.
 6. Only after a successful render is the story marked `"done"` and committed.
 
@@ -64,12 +64,14 @@ If both image APIs fail, the run still finishes using a simple local paper-cutou
 Each full-length story should also include:
 
 - `genre`: a short label shown on the title card
-- `artStyle`: one locked visual style, repeated into every image prompt
-- `character`: a locked description of the main character, used in every prompt
+- `artStyle`: one locked visual style, repeated into every background prompt
+- `characters`: an array of main characters, each with `id`, `name`, a locked `description`, a fixed integer `seed`, and an optional `palette`
+- `character`: a fallback locked description if `characters` is omitted
 - `voice`: an Edge-TTS voice name, optional
 - 30-45 scenes for a 3-4 minute film
+- optional per-scene `shot` (`wide`, `medium`, `close`, `back`, `silhouette`, `empty`, `double`, `two_shot`) and `characterId`
 
-The factory prepends the style and character, and always adds a ban on text, letters, typography, captions, watermarks and logos.
+The factory generates each character once as a transparent puppet and composites that same asset over every scene. Close-ups zoom the puppet rather than inventing a new face. Background prompts are sanitized and always ban text, letters, typography, captions, watermarks and logos. If the total runtime would exceed four minutes, voice is sped slightly to fit.
 
 ## Local commands (on any computer with Node, ffmpeg, and edge-tts)
 

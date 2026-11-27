@@ -14,10 +14,10 @@ import edge_tts
 
 
 DEFAULT_VOICE = "en-GB-RyanNeural"
-RATE = "-12%"
-PITCH = "-3Hz"
-PAUSE_SEC = 0.38
-TAIL_SEC = 0.28
+DEFAULT_RATE = "-6%"
+DEFAULT_PITCH = "-3Hz"
+DEFAULT_PAUSE_SEC = 0.22
+DEFAULT_TAIL_SEC = 0.16
 
 
 def split_sentences(text: str) -> list[str]:
@@ -32,8 +32,8 @@ def ticks_to_seconds(value: float) -> float:
     return float(value)
 
 
-async def synth_sentence(text: str, voice: str, dest: Path) -> list[dict]:
-    communicate = edge_tts.Communicate(text, voice, rate=RATE, pitch=PITCH)
+async def synth_sentence(text: str, voice: str, dest: Path, rate: str, pitch: str) -> list[dict]:
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     words: list[dict] = []
     with dest.open("wb") as fh:
         async for chunk in communicate.stream():
@@ -91,7 +91,7 @@ def concat_audio(parts: list[Path], dest: Path) -> None:
     Path(list_path).unlink(missing_ok=True)
 
 
-async def render(text: str, voice: str, audio_out: Path, words_out: Path) -> None:
+async def render(text: str, voice: str, audio_out: Path, words_out: Path, rate: str, pitch: str, pause_sec: float, tail_sec: float) -> None:
     sentences = split_sentences(text) or [text.strip()]
     tmp = Path(tempfile.mkdtemp(prefix="tts_"))
     audio_parts: list[Path] = []
@@ -101,7 +101,7 @@ async def render(text: str, voice: str, audio_out: Path, words_out: Path) -> Non
     try:
         for index, sentence in enumerate(sentences):
             sent_mp3 = tmp / f"s{index}.mp3"
-            sent_words = await synth_sentence(sentence, voice, sent_mp3)
+            sent_words = await synth_sentence(sentence, voice, sent_mp3, rate, pitch)
             audio_parts.append(sent_mp3)
             for item in sent_words:
                 words.append(
@@ -132,12 +132,12 @@ async def render(text: str, voice: str, audio_out: Path, words_out: Path) -> Non
             offset += dur
             if index < len(sentences) - 1:
                 pause = tmp / f"p{index}.wav"
-                silence_wav(pause, PAUSE_SEC)
+                silence_wav(pause, pause_sec)
                 audio_parts.append(pause)
-                offset += PAUSE_SEC
+                offset += pause_sec
 
         tail = tmp / "tail.wav"
-        silence_wav(tail, TAIL_SEC)
+        silence_wav(tail, tail_sec)
         audio_parts.append(tail)
         audio_out.parent.mkdir(parents=True, exist_ok=True)
         concat_audio(audio_parts, audio_out)
@@ -154,10 +154,25 @@ def main() -> int:
     parser.add_argument("--out", required=True)
     parser.add_argument("--words", required=True)
     parser.add_argument("--voice", default=DEFAULT_VOICE)
+    parser.add_argument("--rate", default=DEFAULT_RATE)
+    parser.add_argument("--pitch", default=DEFAULT_PITCH)
+    parser.add_argument("--pause", type=float, default=DEFAULT_PAUSE_SEC)
+    parser.add_argument("--tail", type=float, default=DEFAULT_TAIL_SEC)
     args = parser.parse_args()
     if not args.text.strip():
         raise SystemExit("Narration text is empty")
-    asyncio.run(render(args.text, args.voice, Path(args.out), Path(args.words)))
+    asyncio.run(
+        render(
+            args.text,
+            args.voice,
+            Path(args.out),
+            Path(args.words),
+            args.rate,
+            args.pitch,
+            args.pause,
+            args.tail,
+        )
+    )
     print(f"Wrote voice {args.out}")
     return 0
 

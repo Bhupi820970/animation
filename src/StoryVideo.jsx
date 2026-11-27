@@ -20,7 +20,7 @@ const ease = Easing.inOut(Easing.cubic);
 export const calculateStoryFrames = (props) => {
   const scenes = props.scenes || [];
   const title = props.titleDurationInFrames || 60;
-  const end = props.endCardDurationInFrames || 225;
+  const end = props.endCardDurationInFrames || 150;
   const overlap = props.overlapFrames ?? 12;
   let total = title;
   scenes.forEach((scene, index) => {
@@ -157,7 +157,7 @@ const EndCard = ({ title, duration }) => {
   );
 };
 
-const Particles = ({ kind, duration }) => {
+const Particles = ({ kind }) => {
   const frame = useCurrentFrame();
   const items = useMemo(() => {
     const count = kind === 'rain' ? 70 : 46;
@@ -196,9 +196,7 @@ const Particles = ({ kind, duration }) => {
               height,
               borderRadius: kind === 'rain' ? 0 : 99,
               background:
-                kind === 'embers'
-                  ? 'rgba(255, 170, 70, 0.85)'
-                  : 'rgba(245, 235, 214, 0.7)',
+                kind === 'embers' ? 'rgba(255, 170, 70, 0.85)' : 'rgba(245, 235, 214, 0.7)',
               opacity,
               transform: kind === 'rain' ? 'rotate(12deg)' : undefined,
             }}
@@ -209,51 +207,69 @@ const Particles = ({ kind, duration }) => {
   );
 };
 
+const WINDOW_SIZE = 8;
+
+const visibleWords = (words, frame) => {
+  if (!words || words.length === 0) return [];
+  let active = words.findIndex((word) => frame >= word.from && frame <= word.to + 3);
+  if (active < 0) {
+    const next = words.findIndex((word) => word.from > frame);
+    active = next < 0 ? words.length - 1 : Math.max(0, next - 1);
+  }
+  const start = Math.max(0, Math.min(active - 2, Math.max(0, words.length - WINDOW_SIZE)));
+  return words.slice(start, start + WINDOW_SIZE);
+};
+
 const Karaoke = ({ words, duration }) => {
   const frame = useCurrentFrame();
   if (!words || words.length === 0) return null;
-  const fade = interpolate(frame, [0, 10, duration - 10, duration], [0, 1, 1, 0], {
+  const fade = interpolate(frame, [0, 8, duration - 10, duration], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
+  const shown = visibleWords(words, frame);
 
   return (
     <div
       style={{
         position: 'absolute',
-        bottom: 72,
+        bottom: 56,
         width: '100%',
         display: 'flex',
         justifyContent: 'center',
-        padding: '0 150px',
+        padding: '0 80px',
         opacity: fade,
+        zIndex: 20,
       }}
     >
       <div
         style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.62)',
-          padding: '16px 32px',
-          borderRadius: 14,
+          backgroundColor: 'rgba(0, 0, 0, 0.86)',
+          padding: '18px 40px 22px',
+          borderRadius: 16,
           textAlign: 'center',
-          lineHeight: 1.45,
-          maxWidth: 1600,
+          lineHeight: 1.35,
+          maxWidth: 1680,
+          border: '1px solid rgba(255, 230, 170, 0.22)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
         }}
       >
-        {words.map((word, index) => {
-          const active = frame >= word.from && frame <= word.to + 2;
-          const spoken = frame > word.to + 2;
+        {shown.map((word, index) => {
+          const active = frame >= word.from && frame <= word.to + 3;
+          const spoken = frame > word.to + 3;
           return (
             <span
-              key={`${word.word}-${index}`}
+              key={`${word.word}-${word.from}-${index}`}
               style={{
                 fontFamily: garamond,
-                fontSize: 46,
-                fontWeight: 600,
-                color: active ? '#ffe7a8' : spoken ? '#f5ebd6' : 'rgba(245, 235, 214, 0.42)',
+                fontSize: 62,
+                fontWeight: 700,
+                color: active ? '#FFE28A' : spoken ? '#FFF8E8' : '#D9D0BC',
+                WebkitTextStroke: active ? '0.4px #3a2a00' : '0.4px #000',
                 textShadow: active
-                  ? '0 0 18px rgba(255, 200, 80, 0.55), 0 2px 8px #000'
-                  : '0 2px 8px #000',
-                marginRight: 10,
+                  ? '0 0 16px rgba(255, 200, 70, 0.7), 0 3px 0 #000, 0 6px 14px #000'
+                  : '0 3px 0 #000, 0 6px 14px #000',
+                marginRight: 14,
                 display: 'inline-block',
               }}
             >
@@ -263,6 +279,41 @@ const Karaoke = ({ words, duration }) => {
         })}
       </div>
     </div>
+  );
+};
+
+const Puppet = ({ puppet, frame, duration }) => {
+  if (!puppet || !puppet.file) return null;
+  const progress = interpolate(frame, [0, duration], [0, 1], {
+    easing: ease,
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const swayX = Math.sin(frame * 0.035) * 3;
+  const swayY = Math.cos(frame * 0.028) * 2;
+  const driftX = interpolate(progress, [0, 1], [puppet.driftX || 0, -1 * (puppet.driftX || 0)]);
+  const scale = puppet.scale || 1;
+  const flip = puppet.flip ? -1 : 1;
+  const width = Math.round(620 * scale);
+  const left = Math.round((puppet.x ?? 0.22) * 1920 - width / 2);
+  const bottom = Math.round(puppet.y ?? 0);
+
+  return (
+    <Img
+      src={staticFile(puppet.file)}
+      style={{
+        position: 'absolute',
+        left,
+        bottom,
+        width,
+        height: 'auto',
+        transform: `translate(${swayX + driftX}px, ${swayY}px) scaleX(${flip})`,
+        filter: 'drop-shadow(16px 22px 18px rgba(0,0,0,0.55))',
+        pointerEvents: 'none',
+        zIndex: puppet.z ?? 5,
+        opacity: puppet.opacity ?? 1,
+      }}
+    />
   );
 };
 
@@ -281,79 +332,73 @@ const SceneBlock = ({ scene }) => {
   });
 
   let bgX = 0;
-  let fgX = 0;
-  let bgScale = interpolate(progress, [0, 1], [1.16, 1.24]);
-  let fgScale = interpolate(progress, [0, 1], [1.04, 1.16]);
-  let fgY = 0;
+  let bgY = 0;
+  let bgScale = interpolate(progress, [0, 1], [1.06, 1.12]);
   const effect = scene.effect || 'zoom_in';
 
   if (effect === 'zoom_out') {
-    bgScale = interpolate(progress, [0, 1], [1.28, 1.16]);
-    fgScale = interpolate(progress, [0, 1], [1.2, 1.05]);
+    bgScale = interpolate(progress, [0, 1], [1.16, 1.06]);
   } else if (effect === 'pan_right') {
-    bgX = interpolate(progress, [0, 1], [-28, 36]);
-    fgX = interpolate(progress, [0, 1], [-70, 80]);
+    bgX = interpolate(progress, [0, 1], [-40, 48]);
+    bgScale = interpolate(progress, [0, 1], [1.1, 1.12]);
   } else if (effect === 'pan_left') {
-    bgX = interpolate(progress, [0, 1], [36, -28]);
-    fgX = interpolate(progress, [0, 1], [80, -70]);
+    bgX = interpolate(progress, [0, 1], [48, -40]);
+    bgScale = interpolate(progress, [0, 1], [1.1, 1.12]);
   } else if (effect === 'push_up') {
-    fgY = interpolate(progress, [0, 1], [30, -36]);
+    bgY = interpolate(progress, [0, 1], [24, -28]);
     bgX = interpolate(progress, [0, 1], [-8, 8]);
   } else if (effect === 'handheld') {
-    fgX = Math.sin(frame * 0.07) * 6 + interpolate(progress, [0, 1], [-18, 22]);
-    fgY = Math.cos(frame * 0.09) * 4;
-    bgX = Math.sin(frame * 0.05) * 3;
+    bgX = Math.sin(frame * 0.06) * 5 + interpolate(progress, [0, 1], [-16, 18]);
+    bgY = Math.cos(frame * 0.08) * 3;
   } else if (effect === 'shake') {
-    fgX = Math.sin(frame * 0.9) * 5;
-    fgY = Math.cos(frame * 1.1) * 3;
-    bgScale = interpolate(progress, [0, 1], [1.12, 1.2]);
+    bgX = Math.sin(frame * 0.9) * 5;
+    bgY = Math.cos(frame * 1.1) * 3;
+    bgScale = interpolate(progress, [0, 1], [1.08, 1.14]);
   } else {
-    // zoom_in and default: slight opposing parallax so the frame is never still
-    bgX = interpolate(progress, [0, 1], [-12, 16]);
-    fgX = interpolate(progress, [0, 1], [-24, 30]);
+    bgX = interpolate(progress, [0, 1], [-16, 20]);
   }
 
-  const light = interpolate(progress, [0, 0.5, 1], [0.12, 0.22, 0.1]);
-  const vignette = interpolate(progress, [0, 1], [0.72, 0.84]);
+  const light = interpolate(progress, [0, 0.5, 1], [0.1, 0.18, 0.1]);
+  // Mild vignette so faces and puppets stay readable
+  const vignette = interpolate(progress, [0, 1], [0.42, 0.52]);
+  const puppets = scene.puppets || [];
+  const closeShot = scene.shot === 'close';
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#000', opacity }}>
+    <AbsoluteFill style={{ backgroundColor: '#000', opacity, overflow: 'hidden' }}>
       <Img
         src={staticFile(scene.imageFile)}
         style={{
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          filter: 'blur(8px) saturate(1.05) brightness(0.72)',
-          transform: `scale(${bgScale}) translate(${bgX}px, -10px)`,
+          // Light blur only on the environment, never on the character layer.
+          filter: closeShot
+            ? 'blur(2.2px) saturate(1.04) brightness(0.82)'
+            : 'blur(2.4px) saturate(1.06) brightness(0.9)',
+          transform: `scale(${bgScale}) translate(${bgX}px, ${bgY}px)`,
         }}
       />
-      <Img
-        src={staticFile(scene.imageFile)}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          transform: `scale(${fgScale}) translate(${fgX}px, ${fgY}px)`,
-        }}
-      />
+      {puppets.map((puppet, index) => (
+        <Puppet key={`${puppet.file}-${index}`} puppet={puppet} frame={frame} duration={dur} />
+      ))}
       <AbsoluteFill
         style={{
-          background: `radial-gradient(circle at 50% 40%, rgba(255,210,130,${light}) 0%, transparent 42%)`,
+          background: `radial-gradient(circle at 50% 38%, rgba(255,210,130,${light}) 0%, transparent 46%)`,
           mixBlendMode: 'screen',
+          pointerEvents: 'none',
         }}
       />
       <AbsoluteFill
         style={{
-          background: `radial-gradient(circle, transparent 36%, rgba(0,0,0,${vignette}) 100%)`,
+          background: `radial-gradient(circle at 50% 45%, transparent 48%, rgba(0,0,0,${vignette}) 100%)`,
+          pointerEvents: 'none',
         }}
       />
-      <Particles kind={scene.particles || 'dust'} duration={dur} />
+      <Particles kind={scene.particles || 'dust'} />
       <Karaoke words={scene.words || []} duration={dur} />
       {scene.audioFile ? <Audio src={staticFile(scene.audioFile)} /> : null}
-      {scene.sfxFile ? (
-        <Audio src={staticFile(scene.sfxFile)} volume={0.28} />
-      ) : null}
+      {scene.sfxFile ? <Audio src={staticFile(scene.sfxFile)} volume={0.28} /> : null}
     </AbsoluteFill>
   );
 };
@@ -376,7 +421,7 @@ const MusicBed = ({ props, scenesEnd }) => {
 export const StoryVideo = (props) => {
   const { starts, scenesEnd } = useMemo(() => buildStarts(props), [props]);
   const titleDur = props.titleDurationInFrames || 60;
-  const endDur = props.endCardDurationInFrames || 225;
+  const endDur = props.endCardDurationInFrames || 150;
   const scenes = props.scenes || [];
 
   return (
@@ -405,7 +450,7 @@ export const StoryVideo = (props) => {
         <AbsoluteFill
           style={{
             pointerEvents: 'none',
-            opacity: 0.08,
+            opacity: 0.07,
             mixBlendMode: 'overlay',
           }}
         >
