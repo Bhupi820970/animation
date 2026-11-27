@@ -542,7 +542,9 @@
         "backgroundPrompt": "A mail slot in a pocked plaster wall, a child's envelope on a stone floor, wet ink, a grey-coated woman stooping to pick it up, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "hold"
       },
       {
         "narration": "I am Samira Nour. I translate for the ceasefire team, which means I turn other people's fear into neat sentences.",
@@ -551,7 +553,9 @@
         "backgroundPrompt": "Samira at a folding table with headphones and a notebook, a cracked window, a quiet damaged street beyond, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "talk"
       },
       {
         "narration": "The city is split by a green line of painted oil drums and men who no longer remember who started the counting.",
@@ -560,7 +564,9 @@
         "backgroundPrompt": "A wide street divided by green oil drums, quiet ruined balconies, late dusty sun, no people in the open",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "walk"
       },
       {
         "narration": "The letter asked, with perfect spelling, whether the school still had the blue shutters, and whether her desk was waiting.",
@@ -569,7 +575,9 @@
         "backgroundPrompt": "Close on a child's handwritten letter, a drawing of blue shutters, Samira's hand at the edge of the paper, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "hold"
       },
       {
         "narration": "The girl's name was Hala. The list said collapsed stairwell, March, age nine. I had translated the list myself.",
@@ -578,7 +586,9 @@
         "backgroundPrompt": "Samira in a dim office looking at a printed casualty list, one name underlined, dust in the light, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "talk"
       },
       {
         "narration": "I took the letter to the school. The shutters were not blue anymore.",
@@ -587,7 +597,9 @@
         "backgroundPrompt": "A damaged school facade, shutters no longer blue, smoke-stained, Samira small at the gate in a grey coat, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "walk"
       },
       {
         "narration": "A caretaker said no children had come since the stairwell. He also said the postman still crossed the line.",
@@ -596,7 +608,9 @@
         "backgroundPrompt": "An old caretaker with keys talking to Samira in a courtyard of broken tiles and a dry fountain, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "neutral",
+        "gesture": "listen"
       },
       {
         "narration": "The second letter came from the other side of the drums. Same hand. It said: I can hear the translators.",
@@ -605,7 +619,9 @@
         "backgroundPrompt": "Samira standing at the green line of oil drums, holding a second envelope, men with rifles far away and uninterested, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "hold"
       },
       {
         "narration": "I am not her aunt. I had only met Hala once, when I helped her mother fill a form.",
@@ -614,7 +630,9 @@
         "backgroundPrompt": "Memory of a small girl and her mother at a form-filling table, Samira leaning in, a stamp, a gentle lamp, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "talk"
       },
       {
         "narration": "I asked the postman where the letters were handed to him. He looked offended, then frightened, and said they.",
@@ -623,7 +641,9 @@
         "backgroundPrompt": "A thin postman with a worn bag beside a bicycle, morning alley, Samira questioning him, laundry overhead, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "talk"
       },
       {
         "narration": "That night I waited in the post office, which is a room with a clock that still believes in hours.",
@@ -632,7 +652,9 @@
         "backgroundPrompt": "A shabby post office at night, Samira on a bench, a stopped clock, pigeonholes, a single hanging bulb, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "listen"
       },
       {
         "narration": "At three, the bag twitched, as if something inside had finished writing, and needed to be delivered immediately.",
@@ -641,7 +663,9 @@
         "backgroundPrompt": "A mail bag on a table stirring slightly, a new envelope sliding toward the light, Samira rising from the bench, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "surprised",
+        "gesture": "reach"
       },
       {
         "narration": "The third letter contained a map of the stairwell, drawn from above.",
@@ -650,7 +674,9 @@
         "backgroundPrompt": "A child's drawn map of a stairwell and a classroom, a small square marked under a desk, Samira's hands shaking the paper, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "hold"
       },
       {
         "narration": "I took a permit, a helmet I did not trust, and two men who owed me translations.",
@@ -659,7 +685,9 @@
         "backgroundPrompt": "Samira and two reluctant men at the school entrance at dawn, helmets, a pale dusty sky, closed shutters, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "walk"
       },
       {
         "narration": "The stairwell was a throat of broken concrete. We did not speak, because some places charge you for words.",
@@ -668,7 +696,9 @@
         "backgroundPrompt": "A collapsed stairwell seen from above, layers of broken concrete paper, a thin beam of morning light, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "idle"
       },
       {
         "narration": "Under a quiet desk we found a pencil box, a ribbon, and a stack of unsent letters, all in the same careful ink.",
@@ -677,7 +707,9 @@
         "backgroundPrompt": "Under a dusty school desk, a pencil box, a ribbon, a stack of letters dated after the collapse, flashlight beam, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "hold"
       },
       {
         "narration": "The dates were impossible, unless a child had kept writing in a place that official language had already closed.",
@@ -686,7 +718,9 @@
         "backgroundPrompt": "Close on letter dates after March, dust motes, Samira's grey sleeve, a shaft of light on the paper, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "hold"
       },
       {
         "narration": "I sat on the floor and read to the dark, like an idiot, and like an aunt.",
@@ -695,7 +729,9 @@
         "backgroundPrompt": "Samira sitting on the classroom floor reading aloud, broken chairs around her, a pale square of window light, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "talk"
       },
       {
         "narration": "The men wanted to leave. Then we all heard a small knock, not from the stair, but from inside.",
@@ -704,7 +740,9 @@
         "backgroundPrompt": "The three adults frozen in the ruined classroom, listening to a wall, a tiny knock, dust falling, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "surprised",
+        "gesture": "listen"
       },
       {
         "narration": "We opened a panel of plaster. There was a crawlspace, and a living child with dusty hair, a dry.",
@@ -713,7 +751,9 @@
         "backgroundPrompt": "A hole in a plaster wall, a living girl in the crawlspace, dusty hair, holding letters, Samira reaching in, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "surprised",
+        "gesture": "reach"
       },
       {
         "narration": "She was not Hala. She was Hala's cousin, hidden by a mother who had not trusted the list, or.",
@@ -722,7 +762,9 @@
         "backgroundPrompt": "Samira wrapping the girl in her grey coat, the child's face against her shoulder, ruined classroom around them, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "worried",
+        "gesture": "talk"
       },
       {
         "narration": "Hala, she said, had taught her how to write like her, so the letters would be taken seriously.",
@@ -731,7 +773,9 @@
         "backgroundPrompt": "The girl at a dusty desk after rescue, writing a sample sentence, Samira watching, blue-shutter drawing beside her, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "talk"
       },
       {
         "narration": "We carried her across the green line at noon, when even the guns were ashamed to be watching.",
@@ -740,7 +784,9 @@
         "backgroundPrompt": "Noon crossing at the oil drums, Samira carrying the child, a quiet street, men looking away, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "walk"
       },
       {
         "narration": "The postman cried, then denied that he had cried, then asked if he should still carry letters with no proper stamps.",
@@ -749,7 +795,9 @@
         "backgroundPrompt": "The postman in the alley wiping his face, bicycle beside him, Samira nodding, the girl half-asleep, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "talk"
       },
       {
         "narration": "I painted one shutter blue myself, badly, and I left it that way.",
@@ -758,7 +806,9 @@
         "backgroundPrompt": "Samira on a ladder painting a single school shutter blue, uneven strokes, late sun, the girl watching from the gate, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "idle"
       },
       {
         "narration": "The letters stopped. In their place, on my table, I found a ribbon and a note: desks can wait. Voices should not.",
@@ -767,7 +817,9 @@
         "backgroundPrompt": "Samira's table at evening, a ribbon and a short child's note, a cup of tea, the damaged city soft in the window, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "sad",
+        "gesture": "hold"
       },
       {
         "narration": "I still translate fear into neat sentences. But I no longer trust a list the way I trust a knock.",
@@ -776,7 +828,9 @@
         "backgroundPrompt": "Samira at the folding table again with her notebook, listening, the cracked window open to a quieter street, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "talk"
       },
       {
         "narration": "And when I cross the green line, I count children, not names, because names can be finished too early.",
@@ -785,7 +839,9 @@
         "backgroundPrompt": "Samira walking along the oil drums at dusk, watching a few children play far off, her notebook closed, no people",
         "shot": "wide",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "walk"
       },
       {
         "narration": "If a letter ever arrives wet again, I will not take it to an office.",
@@ -794,16 +850,20 @@
         "backgroundPrompt": "Night post office, Samira waiting on the bench, the mail bag still, a blue shutter visible through the doorway, no people",
         "shot": "medium",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "hold"
       },
       {
         "narration": "That is the work, in the end. Not the perfect sentence. The decision to keep listening after the official ending.",
         "visualPrompt": "kind guarded eyes, a badly painted blue shutter blurred behind her, warm dust light, no people",
         "effect": "zoom_in",
         "backgroundPrompt": "kind guarded eyes, a badly painted blue shutter blurred behind her, warm dust light, no people",
-        "shot": "medium",
+        "shot": "close",
         "characterId": "samira",
-        "pose": "three_quarter"
+        "pose": "three_quarter",
+        "expression": "determined",
+        "gesture": "talk"
       }
     ],
     "characters": [
@@ -820,6 +880,17 @@
           "boots": "2A2018",
           "shirt": "1F1C1A",
           "accent": "C2A57A"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "average",
+          "hair": "tied_back",
+          "facialHair": "none",
+          "outfit": "coat",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "notebook",
+          "eyes": "3A2A1C"
         }
       }
     ],
@@ -1121,6 +1192,20 @@
           "boots": "161014",
           "shirt": "E8DCC8",
           "accent": "C9A15A"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "slim",
+          "hair": "pinned_up",
+          "facialHair": "none",
+          "outfit": "dress",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "6A6A70",
+          "extras": [
+            "apron"
+          ]
         }
       }
     ],
@@ -1422,6 +1507,17 @@
           "boots": "1A1A1A",
           "shirt": "7BA3C4",
           "accent": "C9A84A"
+        },
+        "appearance": {
+          "body": "male",
+          "build": "broad",
+          "hair": "short",
+          "facialHair": "none",
+          "outfit": "shirt",
+          "hat": "cap",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "3A2A1C"
         }
       }
     ],
@@ -1723,6 +1819,17 @@
           "boots": "1C1C1E",
           "shirt": "5A6066",
           "accent": "5CC8D8"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "average",
+          "hair": "undercut",
+          "facialHair": "none",
+          "outfit": "suit",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "3A2A1C"
         }
       }
     ],
@@ -2028,6 +2135,17 @@
           "boots": "3A2A1C",
           "shirt": "6A6864",
           "accent": "C2A06A"
+        },
+        "appearance": {
+          "body": "male",
+          "build": "broad",
+          "hair": "short",
+          "facialHair": "beard",
+          "outfit": "jacket",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "3A2A1C"
         }
       },
       {
@@ -2043,6 +2161,17 @@
           "boots": "3A2A1C",
           "shirt": "F2EFE8",
           "accent": "C2A06A"
+        },
+        "appearance": {
+          "body": "male",
+          "build": "slim",
+          "hair": "short",
+          "facialHair": "stubble",
+          "outfit": "shirt",
+          "hat": "none",
+          "sleeves": "rolled",
+          "accessory": "none",
+          "eyes": "3A2A1C"
         }
       }
     ],
@@ -2344,6 +2473,18 @@
           "boots": "2A1C1C",
           "shirt": "2A2430",
           "accent": "C0392B"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "average",
+          "hair": "pinned_up",
+          "facialHair": "none",
+          "outfit": "coat",
+          "hat": "visor",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "6B4A28",
+          "lipstick": "C0392B"
         }
       }
     ],
@@ -2645,6 +2786,20 @@
           "boots": "2A2420",
           "shirt": "8A8A8A",
           "accent": "8A8A8A"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "slim",
+          "hair": "braid",
+          "facialHair": "none",
+          "outfit": "dress",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "none",
+          "eyes": "3A2A1C",
+          "extras": [
+            "shawl"
+          ]
         }
       }
     ],
@@ -2946,6 +3101,17 @@
           "boots": "2A2018",
           "shirt": "C2A078",
           "accent": "6B4A2A"
+        },
+        "appearance": {
+          "body": "female",
+          "build": "average",
+          "hair": "low_knot",
+          "facialHair": "none",
+          "outfit": "coat",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "document_roll",
+          "eyes": "3A2A1C"
         }
       }
     ],
@@ -3247,6 +3413,17 @@
           "boots": "2A2A2A",
           "shirt": "8EB4D2",
           "accent": "2A2A2A"
+        },
+        "appearance": {
+          "body": "male",
+          "build": "average",
+          "hair": "thinning",
+          "facialHair": "none",
+          "outfit": "shirt",
+          "hat": "none",
+          "sleeves": "long",
+          "accessory": "headset",
+          "eyes": "3A2A1C"
         }
       }
     ],

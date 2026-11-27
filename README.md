@@ -2,14 +2,14 @@
 
 YouTube paper-cutout story factory. A pending story in `stories.json` is turned into a 1920x1080 video on GitHub Actions: English voiceover, scene images, pan/zoom motion, then an optional YouTube upload.
 
-This pipeline makes narrated illustrated videos (still images with camera moves). It is not the same as hand-iterated Remotion character animation.
+This pipeline makes narrated paper-cutout films in Remotion: rigged 2D SVG characters (walk, blink, expressions, gestures, lip flaps synced to Edge-TTS), Flux paper-style backgrounds (with an SVG backdrop fallback), camera moves, ducked music, SFX, and karaoke captions, at 1080p30, capped at 3-4 minutes.
 
 ## How a run works
 
 1. The workflow starts three times a day (10:00 AM, 1:30 PM, and 7:00 PM IST) or when you click **Run workflow**.
 2. It picks the first story with `"status": "pending"`.
-3. It builds a fixed paper-cutout puppet for each main character (one sheet, reused in every scene), a voice for each scene, and a background with no people and no text.
-4. Remotion composites the same character asset over the backgrounds, then renders `out/final_video.mp4` and saves it as the `youtube-ready-video` artifact. Finished films are capped at 3-4 minutes.
+3. It builds a locked SVG character rig from each character's `appearance` and palette (the same person in every scene), a voice and mouth envelope for each scene, and a people-free paper background.
+4. Remotion animates those rigs over the backgrounds, then renders `out/final_video.mp4` and saves it as the `youtube-ready-video` artifact. Finished films are capped at 3-4 minutes.
 5. If YouTube secrets are set, it uploads the video. If they are not set, upload is skipped.
 6. Only after a successful render is the story marked `"done"` and committed.
 
@@ -71,7 +71,11 @@ Each full-length story should also include:
 - 30-45 scenes for a 3-4 minute film
 - optional per-scene `shot` (`wide`, `medium`, `close`, `back`, `silhouette`, `empty`, `double`, `two_shot`) and `characterId`
 
-The factory generates each character once as a transparent puppet and composites that same asset over every scene. Close-ups zoom the puppet rather than inventing a new face. Background prompts are sanitized and always ban text, letters, typography, captions, watermarks and logos. If the total runtime would exceed four minutes, voice is sped slightly to fit.
+Each character also has an `appearance` object (`body`, `hair`, `outfit`, `palette`, and optional `hat`, `facialHair`, `accessory`, `extras`) so the same SVG rig stays consistent for the whole film. Scenes may include `shot`, `characterId`, `secondaryCharacterId`, `expression`, and `gesture`. Two characters can share a scene. Close-ups scale the same rig rather than inventing a new face.
+
+Background prompts are sanitized and always ban text, letters, typography, captions, watermarks and logos. Image fetches and TTS retry; if Flux and Gemini both fail, a paper-style SVG backdrop is used so the queue still finishes. If the total runtime would exceed four minutes, voice is sped slightly to fit.
+
+A failed or invalid pending story is marked `"failed"` and does not block later stories. CI runs typecheck, story-parsing unit tests, and a short smoke render on every push.
 
 ## Local commands (on any computer with Node, ffmpeg, and edge-tts)
 

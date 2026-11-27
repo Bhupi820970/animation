@@ -1,6 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
+import {
+  pickNextRenderableStory,
+  normalizeAppearance,
+  inferExpression,
+  inferGesture,
+  inferShot as inferShotFromSchema,
+} from './lib/story_schema.mjs';
 
 const storiesPath = './stories.json';
 const publicDir = './public';
@@ -184,23 +191,28 @@ async function fetchPollinations(prompt, seed, width, height, models, extraQuery
           const retryAfterSec = Number(res.headers.get('retry-after'));
           const waitMs =
             Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 5000;
-          console.log(`Pollinations busy (${lastError}), waiting ${Math.round(waitMs / 1000)}s and retrying once`);
-          await sleep(waitMs);
-          const retry = await fetch(candidate.url, { headers: authHeaders() });
-          const retryBuf = Buffer.from(await retry.arrayBuffer());
-          lastError = briefApiError(retryBuf, retry.status);
-          if (retry.status === 401 || retry.status === 402) {
-            console.log(
-              `Pollinations ${candidate.host} model=${model} ${lastError}. Not making any payment; trying the next free option.`,
-            );
-            continue;
+          console.log(`Pollinations busy (${lastError}), retrying up to 3 times`);
+          let recovered = false;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            const wait = attempt === 1 ? waitMs : 4000 * attempt;
+            console.log(`Pollinations retry ${attempt}/3 after ${Math.round(wait / 1000)}s`);
+            await sleep(wait);
+            const retry = await fetch(candidate.url, { headers: authHeaders() });
+            const retryBuf = Buffer.from(await retry.arrayBuffer());
+            lastError = briefApiError(retryBuf, retry.status);
+            if (retry.status === 401 || retry.status === 402) {
+              console.log(
+                `Pollinations ${candidate.host} model=${model} ${lastError}. Not making any payment; trying the next free option.`,
+              );
+              break;
+            }
+            if (retry.ok && isImageBuffer(retryBuf) && retryBuf.length >= MIN_PNG_BYTES) {
+              console.log(`Pollinations succeeded on retry ${attempt}: host=${candidate.host} model=${model}`);
+              return { ok: true, buf: retryBuf, model, host: candidate.host };
+            }
+            console.log(`Pollinations retry ${attempt} failed (${lastError})`);
           }
-          if (retry.ok && isImageBuffer(retryBuf) && retryBuf.length >= MIN_PNG_BYTES) {
-            console.log(`Pollinations succeeded on retry: host=${candidate.host} model=${model}`);
-            return { ok: true, buf: retryBuf, model, host: candidate.host };
-          }
-          console.log(`Pollinations retry failed (${lastError})`);
-          continue;
+          if (!recovered) continue;
         }
 
         if (!res.ok) {
@@ -291,14 +303,61 @@ function renderLocalImage(prompt, destPath, seed) {
   console.log(`Saved ${path.basename(destPath)} (${written.length} bytes, local fallback)`);
 }
 
+function paperizeBackground(destPath, seed) {
+  try {
+    execFileSync(
+      'python3',
+      ['scripts/paperize_background.py', '--in', destPath, '--out', destPath, '--seed', String(seed)],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+  } catch (err) {
+    console.log(`paperize_background skipped: ${err.message || String(err)}`);
+  }
+}
+
+function renderSvgBackground(prompt, destPath, seed) {
+  execFileSync(
+    'python3',
+    ['scripts/svg_background.py', '--out', destPath, '--seed', String(seed), '--prompt', prompt],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const written = fs.readFileSync(destPath);
+  if (written.length < MIN_IMAGE_BYTES || !isJpeg(written)) {
+    throw new Error('SVG backdrop did not write a valid JPEG');
+  }
+}
+
 async function createBackgroundImage(prompt, destPath, seed) {
   const hasKey = Boolean((process.env.POLLINATIONS_API_KEY || '').trim());
-  console.log(`Trying Pollinations${hasKey ? ' with API key' : ' without API key'}; models: flux`);
-  const result = await fetchPollinations(prompt, seed, 1280, 720, ['flux']);
-  if (result.ok && saveJpeg(result.buf, destPath)) return 'pollinations';
-  if (await tryGeminiImage(prompt, destPath)) return 'gemini';
-  renderLocalImage(prompt, destPath, seed);
-  return 'local';
+  console.log(`Trying Pollinations${hasKey ? ' with API key' : ' without API key'}; models: flux (3 attempts)`);
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await fetchPollinations(prompt, seed + attempt - 1, 1280, 720, ['flux']);
+    if (result.ok && saveJpeg(result.buf, destPath)) {
+      paperizeBackground(destPath, seed);
+      return 'pollinations';
+    }
+    if (attempt < 3) {
+      const waitMs = 2000 * attempt;
+      console.log(`Background attempt ${attempt} failed, retrying in ${waitMs / 1000}s`);
+      await sleep(waitMs);
+    }
+  }
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (await tryGeminiImage(prompt, destPath)) {
+      paperizeBackground(destPath, seed);
+      return 'gemini';
+    }
+    if (attempt < 2) await sleep(1500);
+  }
+  console.log('Using SVG paper backdrop fallback (no payment involved)');
+  try {
+    renderSvgBackground(prompt, destPath, seed);
+    return 'svg';
+  } catch (err) {
+    console.log(`SVG backdrop failed (${err.message || String(err)}), using local drawing`);
+    renderLocalImage(prompt, destPath, seed);
+    return 'local';
+  }
 }
 
 function sanitizePrompt(text) {
@@ -377,53 +436,7 @@ function runCutout({ src, dest, pose, palette, silhouette }) {
   }
 }
 
-async function generateCharacterPose(story, character, pose) {
-  const id = character.id;
-  const dest = path.join(publicDir, `char_${id}_${pose}.png`);
-  const rawPath = path.join(publicDir, `char_${id}_${pose}_raw`);
-  const seed = safeSeed((character.seed || stableHash(id)) + ({ three_quarter: 0, front: 11, back: 23 }[pose] || 0));
-  const prompt = buildCharacterPrompt(story, character, pose);
-  const hasKey = Boolean((process.env.POLLINATIONS_API_KEY || '').trim());
-  let rawFile = null;
-  let source = 'local';
-
-  if (hasKey) {
-    // gptimage can return a transparent PNG. It may 402 on a zero balance; never pay, just fall through.
-    console.log(`Character ${id} ${pose}: trying gptimage transparent puppet`);
-    const transparent = await fetchPollinations(prompt, seed, 768, 1024, ['gptimage'], {
-      transparent: 'true',
-    });
-    if (transparent.ok) {
-      rawFile = isPng(transparent.buf) ? `${rawPath}.png` : `${rawPath}.jpg`;
-      fs.writeFileSync(rawFile, transparent.buf);
-      source = 'pollinations-gptimage';
-    } else {
-      console.log(`Character ${id} ${pose}: gptimage unavailable, trying Flux on a green screen`);
-      const flux = await fetchPollinations(prompt, seed, 768, 1024, ['flux']);
-      if (flux.ok) {
-        rawFile = isPng(flux.buf) ? `${rawPath}.png` : `${rawPath}.jpg`;
-        if (isJpeg(flux.buf) || isPng(flux.buf) || isWebp(flux.buf)) {
-          fs.writeFileSync(rawFile, flux.buf);
-        } else {
-          rawFile = null;
-        }
-        if (rawFile) source = 'pollinations-flux';
-      }
-    }
-    if (source.startsWith('pollinations')) await sleep(2200);
-  }
-
-  runCutout({
-    src: rawFile,
-    dest,
-    pose,
-    palette: character.palette || null,
-    silhouette: false,
-  });
-  return { file: path.basename(dest), source };
-}
-
-async function prepareCharacters(story) {
+function prepareCharacterRigs(story) {
   const list = Array.isArray(story.characters) && story.characters.length
     ? story.characters
     : story.character
@@ -432,24 +445,29 @@ async function prepareCharacters(story) {
   const assets = {};
   const sources = {};
   for (const character of list) {
-    assets[character.id] = {};
-    for (const pose of POSES) {
-      console.log(`Generating character puppet ${character.id} pose=${pose}...`);
-      const result = await generateCharacterPose(story, character, pose);
-      assets[character.id][pose] = result.file;
-      sources[`${character.id}:${pose}`] = result.source;
-    }
-    const silDest = path.join(publicDir, `char_${character.id}_silhouette.png`);
-    runCutout({
-      src: path.join(publicDir, assets[character.id].three_quarter),
-      dest: silDest,
-      pose: 'three_quarter',
-      palette: character.palette || null,
-      silhouette: true,
-    });
-    assets[character.id].silhouette = path.basename(silDest);
+    assets[character.id] = {
+      appearance: normalizeAppearance(character),
+      name: character.name,
+      seed: character.seed || stableHash(character.id),
+    };
+    sources[character.id] = 'svg-rig';
   }
   return { assets, sources, list };
+}
+
+function makeMouthEnvelope(audioPath, destPath) {
+  execFileSync(
+    'python3',
+    ['scripts/mouth_envelope.py', '--audio', audioPath, '--out', destPath, '--fps', '30'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (!fs.existsSync(destPath)) return [];
+  try {
+    const values = JSON.parse(fs.readFileSync(destPath, 'utf-8'));
+    return Array.isArray(values) ? values.map((v) => Number(v) || 0) : [];
+  } catch {
+    return [];
+  }
 }
 
 function inferParticles(text) {
@@ -467,14 +485,7 @@ function inferSfx(effect, index) {
 }
 
 function inferShot(scene) {
-  if (scene.shot) return scene.shot;
-  const text = `${scene.visualPrompt || ''} ${scene.narration || ''}`.toLowerCase();
-  if (/(silhouette)/.test(text)) return 'silhouette';
-  if (/(close portrait|close-up|close up|face lit|two-shot)/.test(text)) return 'close';
-  if (/(back turned|from behind|walking away|rear view)/.test(text)) return 'back';
-  if (/(wide |aerial|establishing|empty |plain,|horizon|far view|tiny figure)/.test(text)) return 'wide';
-  if (/(no people|empty environment|deserted)/.test(text)) return 'empty';
-  return 'medium';
+  return inferShotFromSchema(scene);
 }
 
 function placementFor(shot, index, role = 'primary') {
@@ -482,22 +493,22 @@ function placementFor(shot, index, role = 'primary') {
   const side = even ? 0.3 : 0.7;
   if (shot === 'empty') return null;
   if (shot === 'wide') {
-    return { x: role === 'secondary' ? 0.62 : 0.32, y: -10, scale: 0.55, driftX: even ? 10 : -10 };
+    return { x: role === 'secondary' ? 0.64 : 0.3, y: 8, scale: 0.72, driftX: even ? 28 : -28 };
   }
   if (shot === 'close') {
-    return { x: role === 'secondary' ? 0.66 : 0.36, y: -420, scale: 2.05, driftX: 8 };
+    return { x: role === 'secondary' ? 0.66 : 0.38, y: -150, scale: 1.82, driftX: 8 };
   }
   if (shot === 'back') {
-    return { x: side, y: -20, scale: 0.78, driftX: 14 };
+    return { x: side, y: 0, scale: 0.98, driftX: 16 };
   }
   if (shot === 'silhouette') {
-    return { x: 0.5, y: -10, scale: 0.9, driftX: 8 };
+    return { x: 0.5, y: 0, scale: 1.0, driftX: 8 };
   }
   if (shot === 'double' || shot === 'two_shot') {
-    if (role === 'secondary') return { x: 0.68, y: -40, scale: 0.92, driftX: -10, opacity: 0.98 };
-    return { x: 0.3, y: -20, scale: 0.98, driftX: 10 };
+    if (role === 'secondary') return { x: 0.7, y: 0, scale: 1.0, driftX: -12, opacity: 0.98 };
+    return { x: 0.3, y: 0, scale: 1.05, driftX: 12 };
   }
-  return { x: role === 'secondary' ? 0.7 : 0.28, y: -30, scale: 0.92, driftX: even ? 12 : -12 };
+  return { x: role === 'secondary' ? 0.7 : 0.28, y: 0, scale: 1.05, driftX: even ? 12 : -12 };
 }
 
 function poseFor(shot, requested) {
@@ -509,55 +520,79 @@ function poseFor(shot, requested) {
   return 'three_quarter';
 }
 
-function buildPuppets(scene, index, characterAssets, characterList) {
+function buildActors(scene, index, characterAssets, characterList) {
   const shot = inferShot(scene);
   if (shot === 'empty' || !characterAssets || Object.keys(characterAssets).length === 0) {
     return [];
   }
   const primary = scene.characterId || characterList[0]?.id;
-  const secondary = scene.secondaryCharacterId || (shot === 'double' || shot === 'two_shot' ? primary : scene.characterId2);
-  const puppets = [];
+  const secondary =
+    scene.secondaryCharacterId ||
+    (shot === 'double' || shot === 'two_shot' ? characterList[1]?.id || primary : scene.characterId2);
+  const actors = [];
   const add = (id, role, flip) => {
     if (!id || !characterAssets[id]) return;
     const pose = poseFor(shot, role === 'secondary' ? scene.secondaryPose || scene.pose : scene.pose);
-    const file = characterAssets[id][pose] || characterAssets[id].three_quarter;
-    if (!file) return;
     const place = placementFor(shot, index, role);
     if (!place) return;
-    puppets.push({
-      file,
+    const rig = characterAssets[id];
+    const expression =
+      role === 'secondary' ? scene.secondaryExpression || 'neutral' : inferExpression(scene);
+    const gesture =
+      role === 'secondary' ? scene.secondaryGesture || 'listen' : inferGesture(scene);
+    actors.push({
+      id,
+      name: rig.name,
+      appearance: rig.appearance,
+      seed: rig.seed,
+      pose,
+      expression,
+      gesture,
+      action: gesture === 'walk' ? 'walk' : 'idle',
+      speaking: role === 'primary',
       flip: Boolean(flip),
       ...place,
       z: role === 'secondary' ? 4 : 5,
     });
   };
   add(primary, 'primary', scene.flip);
-  if (secondary) {
-    add(secondary, 'secondary', scene.secondaryFlip ?? (secondary === primary ? true : !scene.flip));
+  if (secondary && secondary !== primary) {
+    add(secondary, 'secondary', scene.secondaryFlip ?? !scene.flip);
+  } else if (secondary && secondary === primary && (shot === 'double' || shot === 'two_shot')) {
+    add(secondary, 'secondary', true);
   }
-  return puppets;
+  return actors;
 }
 
-function generateVoice(narration, audioPath, wordsPath, voice) {
-  execFileSync(
-    'python3',
-    [
-      'scripts/tts_scene.py',
-      '--text',
-      narration,
-      '--out',
-      audioPath,
-      '--words',
-      wordsPath,
-      '--voice',
-      voice,
-    ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  const size = fs.statSync(audioPath).size;
-  if (size < 1000) {
-    throw new Error(`Voice file is too small (${size} bytes)`);
+async function generateVoice(narration, audioPath, wordsPath, voice) {
+  let lastError = 'unknown TTS error';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      execFileSync(
+        'python3',
+        [
+          'scripts/tts_scene.py',
+          '--text',
+          narration,
+          '--out',
+          audioPath,
+          '--words',
+          wordsPath,
+          '--voice',
+          voice,
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      const size = fs.statSync(audioPath).size;
+      if (size < 1000) throw new Error(`Voice file is too small (${size} bytes)`);
+      return;
+    } catch (err) {
+      lastError = err.message || String(err);
+      console.log(`TTS attempt ${attempt}/3 failed: ${lastError}`);
+      if (attempt < 3) await sleep(1500 * attempt);
+    }
   }
+  throw new Error(`TTS failed after 3 attempts: ${lastError}`);
 }
 
 function wordsToFrames(wordsPath, tempo = 1) {
@@ -618,6 +653,8 @@ function capStoryDuration(processedScenes) {
     fs.renameSync(dest, src);
     const wordsPath = path.join(publicDir, scene.audioFile.replace('audio_', 'words_').replace(/\.mp3$/, '.json'));
     scene.words = wordsToFrames(wordsPath, tempo);
+    const mouthPath = path.join(publicDir, scene.audioFile.replace(/audio_/, 'mouth_').replace('.mp3', '.json'));
+    scene.mouth = makeMouthEnvelope(src, mouthPath);
     const durationSec = audioDurationSeconds(src) + 0.2;
     scene.durationInFrames = Math.max(60, Math.ceil(durationSec * 30));
   }
@@ -629,10 +666,24 @@ function capStoryDuration(processedScenes) {
 if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
 const stories = JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
-const story = stories.find((item) => item.status === 'pending');
+const picked = pickNextRenderableStory(stories);
+writeOutput('queue_updated', picked.skipped.length ? 'true' : 'false');
+if (picked.skipped.length) {
+  for (const item of picked.skipped) {
+    const broken = stories.find((entry) => entry.id === item.id);
+    if (broken) {
+      broken.status = 'failed';
+      broken.failReason = item.errors.join('; ').slice(0, 300);
+    }
+    console.error(`Skipping invalid pending story ${item.id}: ${item.errors.join('; ')}`);
+  }
+  fs.writeFileSync(storiesPath, `${JSON.stringify(stories, null, 2)}\n`);
+  writeOutput('failed_ids', picked.skipped.map((item) => item.id).join(','));
+}
 
+const story = picked.story;
 if (!story) {
-  console.log('No pending stories found in stories.json.');
+  console.log('No valid pending stories found in stories.json.');
   writeOutput('has_story', 'false');
   process.exit(0);
 }
@@ -643,11 +694,11 @@ writeOutput('story_id', story.id);
 fs.writeFileSync(path.join(publicDir, 'selected_story_id.txt'), `${story.id}\n`);
 
 const voice = story.voice || 'en-GB-RyanNeural';
-const { assets: characterAssets, sources: characterSources, list: characterList } = await prepareCharacters(story);
-console.log(`Character puppets ready: ${JSON.stringify(characterSources)}`);
+const { assets: characterAssets, sources: characterSources, list: characterList } = prepareCharacterRigs(story);
+console.log(`SVG character rigs ready: ${JSON.stringify(characterSources)}`);
 
 const processedScenes = [];
-const sourceCounts = { pollinations: 0, gemini: 0, local: 0 };
+const sourceCounts = { pollinations: 0, gemini: 0, svg: 0, local: 0 };
 const fallbackScenes = [];
 const backgroundSeedBase = story.backgroundSeed || stableHash(`${story.id}-bg`);
 
@@ -661,8 +712,11 @@ for (let i = 0; i < story.scenes.length; i++) {
   const wordsPath = path.join(publicDir, wordsFile);
 
   console.log(`Generating voice for scene ${i + 1}/${story.scenes.length}...`);
-  generateVoice(scene.narration, audioPath, wordsPath, voice);
+  await generateVoice(scene.narration, audioPath, wordsPath, voice);
   const durationSec = audioDurationSeconds(audioPath) + 0.22;
+  const mouthFile = `mouth_${i}.json`;
+  const mouthPath = path.join(publicDir, mouthFile);
+  const mouth = makeMouthEnvelope(audioPath, mouthPath);
 
   console.log(`Generating background for scene ${i + 1}/${story.scenes.length}...`);
   const prompt = buildBackgroundPrompt(story, scene);
@@ -675,15 +729,17 @@ for (let i = 0; i < story.scenes.length; i++) {
   const shot = inferShot(scene);
   processedScenes.push({
     narration: scene.narration,
+    visualPrompt: scene.visualPrompt || scene.backgroundPrompt || '',
     effect,
     shot,
     audioFile,
     imageFile,
     words: wordsToFrames(wordsPath),
+    mouth,
     particles: scene.particles || inferParticles(`${scene.visualPrompt || ''} ${scene.narration}`),
     sfxFile: inferSfx(effect, i),
     imageSource: source,
-    puppets: buildPuppets(scene, i, characterAssets, characterList),
+    actors: buildActors(scene, i, characterAssets, characterList),
     durationInFrames: Math.max(60, Math.ceil(durationSec * 30)),
   });
 }

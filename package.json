@@ -7,7 +7,10 @@
     "render": "npx remotion render src/index.js StoryVideo out/final_video.mp4 --props=public/current_video.json --crf=16 --x264-preset=medium --pixel-format=yuv420p",
     "mark-done": "node scripts/mark_story_done.mjs",
     "validate": "node scripts/validate_stories.mjs",
-    "test": "node scripts/validate_stories.mjs"
+    "test": "node scripts/validate_stories.mjs && node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "smoke": "npx remotion render src/index.js SmokePreview out/smoke.mp4 --frames=0-89 --codec=h264 --x264-preset=ultrafast --crf=28 --concurrency=1",
+    "mark-failed": "node scripts/mark_story_failed.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.220",
@@ -15,5 +18,10 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.220"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "22.9.0",
+    "@types/react": "18.3.12"
   }
 }

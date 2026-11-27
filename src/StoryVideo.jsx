@@ -8,14 +8,27 @@ import {
   interpolate,
   staticFile,
   useCurrentFrame,
+  useVideoConfig,
 } from 'remotion';
 import { loadFont as loadCinzel } from '@remotion/google-fonts/Cinzel';
 import { loadFont as loadGaramond } from '@remotion/google-fonts/EBGaramond';
+import { PaperCharacter } from './characters/PaperCharacter.jsx';
+import { PaperBackdrop, backdropKind } from './characters/PaperBackdrop.jsx';
 
 const { fontFamily: cinzel } = loadCinzel();
 const { fontFamily: garamond } = loadGaramond();
 
+
 const ease = Easing.inOut(Easing.cubic);
+
+const fadeStops = (duration, fadeIn, fadeOut) => {
+  const dur = Math.max(1, duration || 1);
+  const inEnd = Math.max(1, Math.min(fadeIn, Math.max(1, Math.floor(dur / 3))));
+  const outStart = Math.max(inEnd + 1, dur - fadeOut);
+  const end = Math.max(outStart + 1, dur);
+  return [0, inEnd, outStart, end];
+};
+
 
 export const calculateStoryFrames = (props) => {
   const scenes = props.scenes || [];
@@ -44,7 +57,7 @@ const buildStarts = (props) => {
 
 const TitleCard = ({ title, genre, duration }) => {
   const frame = useCurrentFrame();
-  const progress = interpolate(frame, [0, 18, duration - 16, duration], [0, 1, 1, 0], {
+  const progress = interpolate(frame, fadeStops(duration, 18, 16), [0, 1, 1, 0], {
     easing: ease,
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -112,7 +125,7 @@ const TitleCard = ({ title, genre, duration }) => {
 
 const EndCard = ({ title, duration }) => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 24, duration - 30, duration], [0, 1, 1, 0], {
+  const opacity = interpolate(frame, fadeStops(duration, 24, 30), [0, 1, 1, 0], {
     easing: ease,
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -223,7 +236,7 @@ const visibleWords = (words, frame) => {
 const Karaoke = ({ words, duration }) => {
   const frame = useCurrentFrame();
   if (!words || words.length === 0) return null;
-  const fade = interpolate(frame, [0, 8, duration - 10, duration], [0, 1, 1, 0], {
+  const fade = interpolate(frame, fadeStops(duration, 8, 10), [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -282,8 +295,9 @@ const Karaoke = ({ words, duration }) => {
   );
 };
 
-const Puppet = ({ puppet, frame, duration }) => {
-  if (!puppet || !puppet.file) return null;
+const Actor = ({ actor, frame, duration, mouth }) => {
+  if (!actor) return null;
+  const { width: compW, height: compH } = useVideoConfig();
   const progress = interpolate(frame, [0, duration], [0, 1], {
     easing: ease,
     extrapolateLeft: 'clamp',
@@ -291,29 +305,41 @@ const Puppet = ({ puppet, frame, duration }) => {
   });
   const swayX = Math.sin(frame * 0.035) * 3;
   const swayY = Math.cos(frame * 0.028) * 2;
-  const driftX = interpolate(progress, [0, 1], [puppet.driftX || 0, -1 * (puppet.driftX || 0)]);
-  const scale = puppet.scale || 1;
-  const flip = puppet.flip ? -1 : 1;
-  const width = Math.round(620 * scale);
-  const left = Math.round((puppet.x ?? 0.22) * 1920 - width / 2);
-  const bottom = Math.round(puppet.y ?? 0);
-
+  const driftX = interpolate(progress, [0, 1], [actor.driftX || 0, -1 * (actor.driftX || 0)]) * (compW / 1920);
+  const scale = actor.scale || 1;
+  const height = Math.round(compH * 0.92 * scale);
+  const width = Math.round((height * 200) / 500);
+  const left = Math.round((actor.x ?? 0.28) * compW - width / 2);
+  const bottom = Math.round((actor.y ?? 0) * (compH / 1080));
+  const open = actor.speaking ? Number(mouth?.[Math.max(0, Math.min((mouth?.length || 1) - 1, frame))] || 0) : 0;
   return (
-    <Img
-      src={staticFile(puppet.file)}
+    <div
       style={{
         position: 'absolute',
         left,
         bottom,
         width,
-        height: 'auto',
-        transform: `translate(${swayX + driftX}px, ${swayY}px) scaleX(${flip})`,
+        height,
+        transform: `translate(${swayX + driftX}px, ${swayY}px)`,
         filter: 'drop-shadow(16px 22px 18px rgba(0,0,0,0.55))',
         pointerEvents: 'none',
-        zIndex: puppet.z ?? 5,
-        opacity: puppet.opacity ?? 1,
+        zIndex: actor.z ?? 5,
+        opacity: actor.opacity ?? 1,
       }}
-    />
+    >
+      <PaperCharacter
+        appearance={actor.appearance}
+        character={actor.character}
+        frame={frame}
+        mouth={open}
+        pose={actor.pose || 'three_quarter'}
+        expression={actor.expression || 'neutral'}
+        gesture={actor.gesture || 'idle'}
+        action={actor.action}
+        flipped={Boolean(actor.flip)}
+        seed={actor.seed || 1}
+      />
+    </div>
   );
 };
 
@@ -326,7 +352,7 @@ const SceneBlock = ({ scene }) => {
     extrapolateRight: 'clamp',
   });
 
-  const opacity = interpolate(frame, [0, 14, Math.max(16, dur - 14), dur], [0, 1, 1, 0], {
+  const opacity = interpolate(frame, fadeStops(dur, 14, 14), [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -361,26 +387,44 @@ const SceneBlock = ({ scene }) => {
   const light = interpolate(progress, [0, 0.5, 1], [0.1, 0.18, 0.1]);
   // Mild vignette so faces and puppets stay readable
   const vignette = interpolate(progress, [0, 1], [0.42, 0.52]);
-  const puppets = scene.puppets || [];
+  const actors = scene.actors || scene.puppets || [];
   const closeShot = scene.shot === 'close';
+  const hasImage = Boolean(scene.imageFile);
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000', opacity, overflow: 'hidden' }}>
-      <Img
-        src={staticFile(scene.imageFile)}
+      <div
         style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          // Light blur only on the environment, never on the character layer.
+          position: 'absolute',
+          inset: 0,
           filter: closeShot
             ? 'blur(2.2px) saturate(1.04) brightness(0.82)'
-            : 'blur(2.4px) saturate(1.06) brightness(0.9)',
+            : hasImage
+              ? 'blur(2.4px) saturate(1.06) brightness(0.9)'
+              : 'saturate(1.04) brightness(0.95)',
           transform: `scale(${bgScale}) translate(${bgX}px, ${bgY}px)`,
         }}
-      />
-      {puppets.map((puppet, index) => (
-        <Puppet key={`${puppet.file}-${index}`} puppet={puppet} frame={frame} duration={dur} />
+      >
+        {hasImage ? (
+          <Img
+            src={staticFile(scene.imageFile)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <PaperBackdrop
+            kind={scene.backdrop || backdropKind(`${scene.visualPrompt || ''} ${scene.narration || ''}`)}
+            frame={frame}
+          />
+        )}
+      </div>
+      {actors.map((actor, index) => (
+        <Actor
+          key={`${actor.id || 'actor'}-${index}`}
+          actor={actor}
+          frame={frame}
+          duration={dur}
+          mouth={scene.mouth}
+        />
       ))}
       <AbsoluteFill
         style={{

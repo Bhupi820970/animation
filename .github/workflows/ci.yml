@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg python3-pip
+          pip install pillow
+
+      - name: Install Node Packages
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate stories and unit tests
+        run: npm test
+
+      - name: Smoke render
+        run: |
+          npx remotion browser ensure
+          npm run smoke
+
+      - name: Upload smoke clip
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-preview
+          path: out/smoke.mp4
+          if-no-files-found: error

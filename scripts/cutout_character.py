@@ -154,10 +154,117 @@ def despill(img: Image.Image) -> Image.Image:
             r, g, b, a = px[x, y]
             if a == 0:
                 continue
-            if g > r + 12 and g > b + 8:
-                g2 = min(g, max(r, b) + 6)
-                px[x, y] = (r, g2, b, a)
+            if g > r + 8 and g > b + 6:
+                g2 = min(g, int((r + b) * 0.5) + 4)
+                px[x, y] = (r, max(0, min(255, g2)), b, a)
     return img
+
+
+def defringe(img: Image.Image, shrink=3) -> Image.Image:
+    """Eat the lime halo left by chroma key, then feather the edge."""
+    out = despill(img.convert("RGBA"))
+    alpha = out.getchannel("A")
+    for _ in range(max(1, shrink)):
+        alpha = alpha.filter(ImageFilter.MinFilter(3))
+    alpha = alpha.filter(ImageFilter.GaussianBlur(0.7))
+    out.putalpha(alpha)
+    return despill(out)
+
+
+def row_occupancy(alpha: Image.Image) -> list[int]:
+    w, h = alpha.size
+    px = alpha.load()
+    rows = []
+    for y in range(h):
+        rows.append(sum(1 for x in range(w) if px[x, y] > 40))
+    return rows
+
+
+def derive_back(front: Image.Image, palette: dict) -> Image.Image:
+    """Build a back view from the same front sheet so clothes stay identical."""
+    img = front.convert("RGBA").copy()
+    w, h = img.size
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox() or (0, 0, w, h)
+    x0, y0, x1, y1 = bbox
+    fh = max(1, y1 - y0)
+    head_bottom = y0 + int(fh * 0.28)
+    # Sample hair from the top of the head.
+    hair = palette.get("hair", (40, 32, 28))
+    px = img.load()
+    ap = alpha.load()
+    samples = []
+    for y in range(y0, min(y0 + max(8, fh // 12), h)):
+        for x in range(x0, x1, 3):
+            if ap[x, y] > 180:
+                r, g, b, _a = px[x, y]
+                samples.append((r, g, b))
+    if samples:
+        samples.sort()
+        hair = samples[len(samples) // 2]
+    face_top = y0 + int(fh * 0.08)
+    face_left = x0 + int((x1 - x0) * 0.22)
+    face_right = x0 + int((x1 - x0) * 0.78)
+    draw = ImageDraw.Draw(img)
+    draw.ellipse((face_left, face_top, face_right, head_bottom), fill=(*hair, 255))
+    shade = Image.new("RGBA", img.size, (0, 0, 0, 48))
+    img = Image.alpha_composite(img, Image.composite(shade, Image.new("RGBA", img.size, (0, 0, 0, 0)), alpha))
+    img.putalpha(alpha)
+    return img
+
+
+def build_rig(full: Image.Image, dest_prefix: Path) -> dict:
+    """Split a standing puppet into head / torso / legs for a 2D cutout rig."""
+    img = full.convert("RGBA")
+    w, h = img.size
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox() or (0, 0, w, h)
+    x0, y0, x1, y1 = bbox
+    fh = max(1, y1 - y0)
+    fw = max(1, x1 - x0)
+    cx = (x0 + x1) // 2
+    neck_y = y0 + int(fh * 0.24)
+    hip_y = y0 + int(fh * 0.58)
+    overlap = max(12, fh // 40)
+
+    def layer_box(box):
+        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        crop = img.crop(box)
+        layer.paste(crop, (box[0], box[1]))
+        # Keep only the original alpha inside the box
+        mask = Image.new("L", (w, h), 0)
+        mask.paste(alpha.crop(box), (box[0], box[1]))
+        layer.putalpha(mask)
+        return layer
+
+    head = layer_box((0, 0, w, min(h, neck_y + overlap)))
+    torso = layer_box((0, max(0, neck_y - overlap), w, min(h, hip_y + overlap)))
+    left_leg = layer_box((0, max(0, hip_y - overlap), cx + overlap, h))
+    right_leg = layer_box((cx - overlap, max(0, hip_y - overlap), w, h))
+
+    files = {}
+    for name, layer in (
+        ("head", head),
+        ("torso", torso),
+        ("left_leg", left_leg),
+        ("right_leg", right_leg),
+    ):
+        path = Path(str(dest_prefix) + f"_{name}.png")
+        layer.save(path, "PNG")
+        files[name] = path.name
+
+    rig = {
+        "width": w,
+        "height": h,
+        "neckY": round(neck_y / h, 4),
+        "hipY": round(hip_y / h, 4),
+        "centerX": round(cx / w, 4),
+        "mouthY": round((y0 + int(fh * 0.20)) / h, 4),
+        "eyeY": round((y0 + int(fh * 0.12)) / h, 4),
+        "files": files,
+    }
+    Path(str(dest_prefix) + "_rig.json").write_text(json.dumps(rig, indent=2), encoding="utf-8")
+    return rig
 
 
 def alpha_usable(img: Image.Image) -> bool:
@@ -302,7 +409,7 @@ def make_silhouette(img: Image.Image) -> Image.Image:
     return sil
 
 
-def process(src_path: Path | None, out_path: Path, pose: str, palette: dict, silhouette: bool) -> str:
+def process(src_path: Path | None, out_path: Path, pose: str, palette: dict, silhouette: bool) -> tuple[str, Image.Image]:
     cut = None
     source = "local"
     if src_path and src_path.exists() and src_path.stat().st_size > 1000:
@@ -325,6 +432,8 @@ def process(src_path: Path | None, out_path: Path, pose: str, palette: dict, sil
     if cut is None:
         cut = draw_local_puppet(pose, palette)
         source = "local"
+    if not silhouette:
+        cut = defringe(cut, shrink=3)
     if silhouette:
         cut = make_silhouette(cut)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -334,7 +443,7 @@ def process(src_path: Path | None, out_path: Path, pose: str, palette: dict, sil
         ratio = target_h / cut.size[1]
         cut = cut.resize((max(1, int(cut.size[0] * ratio)), target_h), Image.Resampling.LANCZOS)
     cut.save(out_path, "PNG")
-    return source
+    return source, cut
 
 
 def main() -> int:
@@ -344,14 +453,34 @@ def main() -> int:
     parser.add_argument("--pose", default="three_quarter")
     parser.add_argument("--palette", default="")
     parser.add_argument("--silhouette", action="store_true")
+    parser.add_argument("--derive-views", action="store_true")
+    parser.add_argument("--rig", action="store_true")
     args = parser.parse_args()
     palette = load_palette(args.palette or None)
     src = Path(args.src) if args.src else None
     out = Path(args.out)
-    source = process(src, out, args.pose, palette, args.silhouette)
+    source, cut = process(src, out, args.pose, palette, args.silhouette)
     print(f"Wrote cutout {out} source={source}")
     if not out.exists() or out.stat().st_size < 2000:
         raise SystemExit("cutout did not write a usable PNG")
+    if args.derive_views and not args.silhouette:
+        if out.name.endswith("_three_quarter.png"):
+            back_path = out.with_name(out.name.replace("_three_quarter.png", "_back.png"))
+            sil_path = out.with_name(out.name.replace("_three_quarter.png", "_silhouette.png"))
+        else:
+            back_path = out.with_name(out.stem + "_back.png")
+            sil_path = out.with_name(out.stem + "_silhouette.png")
+        derive_back(cut, palette).save(back_path, "PNG")
+        print(f"Wrote derived back {back_path}")
+        make_silhouette(cut).save(sil_path, "PNG")
+        print(f"Wrote silhouette {sil_path}")
+    if args.rig and not args.silhouette:
+        if out.name.endswith("_three_quarter.png"):
+            prefix = out.with_name(out.name.replace("_three_quarter.png", ""))
+        else:
+            prefix = out.with_suffix("")
+        rig = build_rig(cut, prefix)
+        print(f"Wrote rig {prefix}_rig.json layers={list(rig['files'].values())}")
     return 0
 
 
