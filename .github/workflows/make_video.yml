@@ -48,14 +48,20 @@ jobs:
 
       - name: Render Full HD Video (Remotion)
         if: steps.prepare.outputs.has_story == 'true'
-        run: npm run render
+        run: |
+          npm run render
+          cp -f public/captions.srt out/final_video.srt
+          cp -f public/thumbnail.png out/thumbnail.png
 
-      - name: Save Finished MP4 Video
+      - name: Save Finished Video, Captions, and Thumbnail
         if: steps.prepare.outputs.has_story == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: youtube-ready-video
-          path: out/final_video.mp4
+          path: |
+            out/final_video.mp4
+            out/final_video.srt
+            out/thumbnail.png
           if-no-files-found: error
 
       - name: Upload to YouTube

@@ -12,14 +12,14 @@ import {
 } from 'remotion';
 import { loadFont as loadCinzel } from '@remotion/google-fonts/Cinzel';
 import { loadFont as loadGaramond } from '@remotion/google-fonts/EBGaramond';
-import { PaperCharacter } from './characters/PaperCharacter.jsx';
 import { PaperBackdrop, backdropKind } from './characters/PaperBackdrop.jsx';
 
 const { fontFamily: cinzel } = loadCinzel();
 const { fontFamily: garamond } = loadGaramond();
 
-
+const CREAM = '#F5EBD6';
 const ease = Easing.inOut(Easing.cubic);
+const KEN_BURNS = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right'];
 
 const fadeStops = (duration, fadeIn, fadeOut) => {
   const dur = Math.max(1, duration || 1);
@@ -29,10 +29,38 @@ const fadeStops = (duration, fadeIn, fadeOut) => {
   return [0, inEnd, outStart, end];
 };
 
+const chunkTimedWords = (words, maxWords = 8) => {
+  const list = Array.isArray(words) ? words.filter((word) => word && word.word) : [];
+  if (!list.length) return [];
+  const cues = [];
+  for (let i = 0; i < list.length; i += maxWords) {
+    const slice = list.slice(i, i + maxWords);
+    const from = Number(slice[0].from) || 0;
+    const to = Math.max(from + 1, Number(slice[slice.length - 1].to) || from + 1);
+    cues.push({ text: slice.map((word) => word.word).join(' '), from, to });
+  }
+  return cues;
+};
+
+const narrationCues = (narration, durationInFrames, maxWords = 8) => {
+  const tokens = String(narration || '').trim().split(/\s+/).filter(Boolean);
+  const duration = Math.max(1, Number(durationInFrames) || 1);
+  if (!tokens.length) return [];
+  const chunks = [];
+  for (let i = 0; i < tokens.length; i += maxWords) {
+    chunks.push(tokens.slice(i, i + maxWords).join(' '));
+  }
+  const slice = duration / chunks.length;
+  return chunks.map((text, index) => ({
+    text,
+    from: Math.round(index * slice),
+    to: Math.round((index + 1) * slice),
+  }));
+};
 
 export const calculateStoryFrames = (props) => {
   const scenes = props.scenes || [];
-  const title = props.titleDurationInFrames || 60;
+  const title = props.titleDurationInFrames || 0;
   const end = props.endCardDurationInFrames || 150;
   const overlap = props.overlapFrames ?? 12;
   let total = title;
@@ -45,9 +73,9 @@ export const calculateStoryFrames = (props) => {
 
 const buildStarts = (props) => {
   const overlap = props.overlapFrames ?? 12;
-  const title = props.titleDurationInFrames || 60;
+  const title = props.titleDurationInFrames || 0;
   const starts = [];
-  let cursor = Math.max(0, title - 18);
+  let cursor = Math.max(0, title);
   (props.scenes || []).forEach((scene) => {
     starts.push(cursor);
     cursor += (scene.durationInFrames || 0) - overlap;
@@ -55,82 +83,16 @@ const buildStarts = (props) => {
   return { starts, scenesEnd: cursor + overlap };
 };
 
-const TitleCard = ({ title, genre, duration }) => {
-  const frame = useCurrentFrame();
-  const progress = interpolate(frame, fadeStops(duration, 18, 16), [0, 1, 1, 0], {
-    easing: ease,
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const line = interpolate(frame, [8, 32], [0, 1], {
-    easing: ease,
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const shift = interpolate(frame, [0, duration], [16, -10], { easing: ease });
-
-  return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: '#07070a',
-        opacity: progress,
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-    >
-      <div
-        style={{
-          transform: `translateY(${shift}px)`,
-          textAlign: 'center',
-          padding: '0 140px',
-        }}
-      >
-        <div
-          style={{
-            fontFamily: garamond,
-            fontSize: 28,
-            letterSpacing: 10,
-            textTransform: 'uppercase',
-            color: '#d7c199',
-            opacity: 0.8,
-            marginBottom: 28,
-          }}
-        >
-          {genre || 'A paper-cutout film'}
-        </div>
-        <div
-          style={{
-            fontFamily: cinzel,
-            fontSize: 86,
-            fontWeight: 700,
-            color: '#f4ead2',
-            lineHeight: 1.15,
-            textShadow: '0 8px 30px rgba(0,0,0,0.8)',
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            margin: '34px auto 0',
-            height: 2,
-            width: 280 * line,
-            background: 'linear-gradient(90deg, transparent, #e2c37a, transparent)',
-          }}
-        />
-      </div>
-    </AbsoluteFill>
-  );
-};
-
 const EndCard = ({ title, duration }) => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, fadeStops(duration, 24, 30), [0, 1, 1, 0], {
+  const fadeIn = Math.min(30, Math.max(8, Math.floor(duration / 5)));
+  const fadeOut = Math.min(30, Math.max(6, Math.floor(duration / 6)));
+  const opacity = interpolate(frame, fadeStops(duration, fadeIn, fadeOut), [0, 1, 1, 0], {
     easing: ease,
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const y = interpolate(frame, [0, duration], [20, -12], { easing: ease });
+  const y = interpolate(frame, [0, duration], [16, -8], { easing: ease });
 
   return (
     <AbsoluteFill
@@ -148,8 +110,9 @@ const EndCard = ({ title, duration }) => {
             fontSize: 34,
             letterSpacing: 12,
             textTransform: 'uppercase',
-            color: '#e2c37a',
+            color: CREAM,
             marginBottom: 22,
+            textShadow: '0 2px 16px rgba(0,0,0,0.9)',
           }}
         >
           The End
@@ -158,9 +121,10 @@ const EndCard = ({ title, duration }) => {
           style={{
             fontFamily: cinzel,
             fontSize: 58,
-            color: '#f4ead2',
+            color: CREAM,
             padding: '0 160px',
             lineHeight: 1.2,
+            textShadow: '0 2px 18px rgba(0,0,0,0.9)',
           }}
         >
           {title}
@@ -195,7 +159,7 @@ const Particles = ({ kind }) => {
       {items.map((p) => {
         const travel = (p.y + frame * p.speed) % 1120;
         const x = (p.x + frame * p.drift + 1920) % 1920;
-        const opacity = 0.18 + 0.18 * Math.sin((frame + p.seed * 9) / 16);
+        const opacity = 0.16 + 0.14 * Math.sin((frame + p.seed * 9) / 16);
         const height = kind === 'rain' ? 18 : p.size;
         const width = kind === 'rain' ? 1.2 : p.size;
         return (
@@ -220,127 +184,69 @@ const Particles = ({ kind }) => {
   );
 };
 
-const WINDOW_SIZE = 8;
-
-const visibleWords = (words, frame) => {
-  if (!words || words.length === 0) return [];
-  let active = words.findIndex((word) => frame >= word.from && frame <= word.to + 3);
-  if (active < 0) {
-    const next = words.findIndex((word) => word.from > frame);
-    active = next < 0 ? words.length - 1 : Math.max(0, next - 1);
-  }
-  const start = Math.max(0, Math.min(active - 2, Math.max(0, words.length - WINDOW_SIZE)));
-  return words.slice(start, start + WINDOW_SIZE);
-};
-
-const Karaoke = ({ words, duration }) => {
+const Subtitles = ({ scene }) => {
   const frame = useCurrentFrame();
-  if (!words || words.length === 0) return null;
-  const fade = interpolate(frame, fadeStops(duration, 8, 10), [0, 1, 1, 0], {
+  const cues = useMemo(() => {
+    if (scene?.words?.length) return chunkTimedWords(scene.words, 8);
+    return narrationCues(scene?.narration || '', scene?.durationInFrames || 1, 8);
+  }, [scene]);
+  if (!cues.length) return null;
+  const active = cues.find((cue) => frame >= cue.from && frame < cue.to) || cues.find((cue) => frame < cue.to);
+  if (!active || !active.text) return null;
+  const fade = interpolate(frame, fadeStops(scene.durationInFrames || 1, 6, 8), [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const shown = visibleWords(words, frame);
 
   return (
     <div
       style={{
         position: 'absolute',
-        bottom: 56,
+        bottom: 64,
         width: '100%',
         display: 'flex',
         justifyContent: 'center',
-        padding: '0 80px',
+        padding: '0 140px',
         opacity: fade,
         zIndex: 20,
+        pointerEvents: 'none',
       }}
     >
       <div
         style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.86)',
-          padding: '18px 40px 22px',
-          borderRadius: 16,
+          fontFamily: garamond,
+          fontSize: 46,
+          fontWeight: 600,
+          color: CREAM,
           textAlign: 'center',
-          lineHeight: 1.35,
-          maxWidth: 1680,
-          border: '1px solid rgba(255, 230, 170, 0.22)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
+          lineHeight: 1.3,
+          maxWidth: 1600,
+          textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 4px 14px rgba(0,0,0,0.9)',
         }}
       >
-        {shown.map((word, index) => {
-          const active = frame >= word.from && frame <= word.to + 3;
-          const spoken = frame > word.to + 3;
-          return (
-            <span
-              key={`${word.word}-${word.from}-${index}`}
-              style={{
-                fontFamily: garamond,
-                fontSize: 62,
-                fontWeight: 700,
-                color: active ? '#FFE28A' : spoken ? '#FFF8E8' : '#D9D0BC',
-                WebkitTextStroke: active ? '0.4px #3a2a00' : '0.4px #000',
-                textShadow: active
-                  ? '0 0 16px rgba(255, 200, 70, 0.7), 0 3px 0 #000, 0 6px 14px #000'
-                  : '0 3px 0 #000, 0 6px 14px #000',
-                marginRight: 14,
-                display: 'inline-block',
-              }}
-            >
-              {word.word}
-            </span>
-          );
-        })}
+        {active.text}
       </div>
     </div>
   );
 };
 
-const Actor = ({ actor, frame, duration, mouth }) => {
-  if (!actor) return null;
-  const { width: compW, height: compH } = useVideoConfig();
-  const progress = interpolate(frame, [0, duration], [0, 1], {
-    easing: ease,
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const swayX = Math.sin(frame * 0.035) * 3;
-  const swayY = Math.cos(frame * 0.028) * 2;
-  const driftX = interpolate(progress, [0, 1], [actor.driftX || 0, -1 * (actor.driftX || 0)]) * (compW / 1920);
-  const scale = actor.scale || 1;
-  const height = Math.round(compH * 0.92 * scale);
-  const width = Math.round((height * 200) / 500);
-  const left = Math.round((actor.x ?? 0.28) * compW - width / 2);
-  const bottom = Math.round((actor.y ?? 0) * (compH / 1080));
-  const open = actor.speaking ? Number(mouth?.[Math.max(0, Math.min((mouth?.length || 1) - 1, frame))] || 0) : 0;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left,
-        bottom,
-        width,
-        height,
-        transform: `translate(${swayX + driftX}px, ${swayY}px)`,
-        filter: 'drop-shadow(16px 22px 18px rgba(0,0,0,0.55))',
-        pointerEvents: 'none',
-        zIndex: actor.z ?? 5,
-        opacity: actor.opacity ?? 1,
-      }}
-    >
-      <PaperCharacter
-        appearance={actor.appearance}
-        character={actor.character}
-        frame={frame}
-        mouth={open}
-        pose={actor.pose || 'three_quarter'}
-        expression={actor.expression || 'neutral'}
-        gesture={actor.gesture || 'idle'}
-        action={actor.action}
-        flipped={Boolean(actor.flip)}
-        seed={actor.seed || 1}
-      />
-    </div>
-  );
+const kenBurns = (effect, progress, frame) => {
+  let bgX = 0;
+  let bgY = 0;
+  let bgScale = interpolate(progress, [0, 1], [1.06, 1.14]);
+  if (effect === 'zoom_out') {
+    bgScale = interpolate(progress, [0, 1], [1.16, 1.06]);
+  } else if (effect === 'pan_right') {
+    bgX = interpolate(progress, [0, 1], [-48, 48]);
+    bgScale = interpolate(progress, [0, 1], [1.12, 1.14]);
+  } else if (effect === 'pan_left') {
+    bgX = interpolate(progress, [0, 1], [48, -48]);
+    bgScale = interpolate(progress, [0, 1], [1.12, 1.14]);
+  } else {
+    bgX = interpolate(progress, [0, 1], [-12, 16]);
+    bgY = interpolate(progress, [0, 1], [6, -8]);
+  }
+  return { bgX, bgY, bgScale, flicker: Math.sin(frame * 0.015) * 0 };
 };
 
 const SceneBlock = ({ scene }) => {
@@ -351,44 +257,14 @@ const SceneBlock = ({ scene }) => {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-
   const opacity = interpolate(frame, fadeStops(dur, 14, 14), [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-
-  let bgX = 0;
-  let bgY = 0;
-  let bgScale = interpolate(progress, [0, 1], [1.06, 1.12]);
-  const effect = scene.effect || 'zoom_in';
-
-  if (effect === 'zoom_out') {
-    bgScale = interpolate(progress, [0, 1], [1.16, 1.06]);
-  } else if (effect === 'pan_right') {
-    bgX = interpolate(progress, [0, 1], [-40, 48]);
-    bgScale = interpolate(progress, [0, 1], [1.1, 1.12]);
-  } else if (effect === 'pan_left') {
-    bgX = interpolate(progress, [0, 1], [48, -40]);
-    bgScale = interpolate(progress, [0, 1], [1.1, 1.12]);
-  } else if (effect === 'push_up') {
-    bgY = interpolate(progress, [0, 1], [24, -28]);
-    bgX = interpolate(progress, [0, 1], [-8, 8]);
-  } else if (effect === 'handheld') {
-    bgX = Math.sin(frame * 0.06) * 5 + interpolate(progress, [0, 1], [-16, 18]);
-    bgY = Math.cos(frame * 0.08) * 3;
-  } else if (effect === 'shake') {
-    bgX = Math.sin(frame * 0.9) * 5;
-    bgY = Math.cos(frame * 1.1) * 3;
-    bgScale = interpolate(progress, [0, 1], [1.08, 1.14]);
-  } else {
-    bgX = interpolate(progress, [0, 1], [-16, 20]);
-  }
-
-  const light = interpolate(progress, [0, 0.5, 1], [0.1, 0.18, 0.1]);
-  // Mild vignette so faces and puppets stay readable
-  const vignette = interpolate(progress, [0, 1], [0.42, 0.52]);
-  const actors = scene.actors || scene.puppets || [];
-  const closeShot = scene.shot === 'close';
+  const effect = KEN_BURNS.includes(scene.effect) ? scene.effect : 'zoom_in';
+  const { bgX, bgY, bgScale } = kenBurns(effect, progress, frame);
+  const light = interpolate(progress, [0, 0.5, 1], [0.08, 0.14, 0.08]);
+  const vignette = interpolate(progress, [0, 1], [0.58, 0.68]);
   const hasImage = Boolean(scene.imageFile);
 
   return (
@@ -397,11 +273,7 @@ const SceneBlock = ({ scene }) => {
         style={{
           position: 'absolute',
           inset: 0,
-          filter: closeShot
-            ? 'blur(2.2px) saturate(1.04) brightness(0.82)'
-            : hasImage
-              ? 'blur(2.4px) saturate(1.06) brightness(0.9)'
-              : 'saturate(1.04) brightness(0.95)',
+          filter: hasImage ? 'saturate(1.08) contrast(1.05) brightness(0.96)' : 'saturate(1.04) brightness(0.95)',
           transform: `scale(${bgScale}) translate(${bgX}px, ${bgY}px)`,
         }}
       >
@@ -417,15 +289,6 @@ const SceneBlock = ({ scene }) => {
           />
         )}
       </div>
-      {actors.map((actor, index) => (
-        <Actor
-          key={`${actor.id || 'actor'}-${index}`}
-          actor={actor}
-          frame={frame}
-          duration={dur}
-          mouth={scene.mouth}
-        />
-      ))}
       <AbsoluteFill
         style={{
           background: `radial-gradient(circle at 50% 38%, rgba(255,210,130,${light}) 0%, transparent 46%)`,
@@ -435,12 +298,12 @@ const SceneBlock = ({ scene }) => {
       />
       <AbsoluteFill
         style={{
-          background: `radial-gradient(circle at 50% 45%, transparent 48%, rgba(0,0,0,${vignette}) 100%)`,
+          background: `radial-gradient(circle at 50% 45%, transparent 42%, rgba(0,0,0,${vignette}) 100%)`,
           pointerEvents: 'none',
         }}
       />
       <Particles kind={scene.particles || 'dust'} />
-      <Karaoke words={scene.words || []} duration={dur} />
+      <Subtitles scene={scene} />
       {scene.audioFile ? <Audio src={staticFile(scene.audioFile)} /> : null}
       {scene.sfxFile ? <Audio src={staticFile(scene.sfxFile)} volume={0.28} /> : null}
     </AbsoluteFill>
@@ -448,23 +311,39 @@ const SceneBlock = ({ scene }) => {
 };
 
 const MusicBed = ({ props, scenesEnd }) => {
-  const frame = useCurrentFrame();
-  const title = props.titleDurationInFrames || 60;
+  const { durationInFrames, fps } = useVideoConfig();
+  if (!props.musicFile) return null;
   const voiceRanges = (props.scenes || []).map((scene, index) => {
     const start = (props._starts || [])[index] || 0;
     return [start, start + (scene.durationInFrames || 0) - 8];
   });
-  const speaking = voiceRanges.some(([from, to]) => frame >= from && frame < to);
-  const inTitle = frame < title;
-  const inEnd = frame >= scenesEnd;
-  const ducked = speaking ? 0.16 : inTitle || inEnd ? 0.36 : 0.24;
-  if (!props.musicFile) return null;
-  return <Audio src={staticFile(props.musicFile)} volume={ducked} />;
+  const fadeFrames = Math.round(3 * (fps || 30));
+  const fadeStart = Math.max(0, durationInFrames - fadeFrames);
+  const last = Math.max(fadeStart + 1, durationInFrames - 1);
+
+  return (
+    <Audio
+      src={staticFile(props.musicFile)}
+      loop
+      volume={(frame) => {
+        const speaking = voiceRanges.some(([from, to]) => frame >= from && frame < to);
+        const base = speaking ? 0.06 : 0.12;
+        if (frame < fadeStart) return base;
+        return (
+          base *
+          interpolate(frame, [fadeStart, last], [1, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+          })
+        );
+      }}
+    />
+  );
 };
 
 export const StoryVideo = (props) => {
   const { starts, scenesEnd } = useMemo(() => buildStarts(props), [props]);
-  const titleDur = props.titleDurationInFrames || 60;
+  const titleDur = props.titleDurationInFrames || 0;
   const endDur = props.endCardDurationInFrames || 150;
   const scenes = props.scenes || [];
 
@@ -472,13 +351,15 @@ export const StoryVideo = (props) => {
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
       {props.musicFile ? <MusicBed props={{ ...props, _starts: starts }} scenesEnd={scenesEnd} /> : null}
 
-      <Sequence from={0} durationInFrames={titleDur}>
-        <TitleCard title={props.title} genre={props.genre} duration={titleDur} />
-      </Sequence>
+      {titleDur > 0 ? (
+        <Sequence from={0} durationInFrames={titleDur}>
+          <AbsoluteFill style={{ backgroundColor: '#000' }} />
+        </Sequence>
+      ) : null}
 
       {scenes.map((scene, index) => (
         <Sequence
-          key={`${scene.imageFile}-${index}`}
+          key={`${scene.imageFile || scene.narration || 'scene'}-${index}`}
           from={starts[index]}
           durationInFrames={scene.durationInFrames}
         >

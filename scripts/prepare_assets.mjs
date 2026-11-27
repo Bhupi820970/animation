@@ -4,16 +4,15 @@ import { execFileSync } from 'child_process';
 import {
   pickNextRenderableStory,
   normalizeAppearance,
-  inferExpression,
-  inferGesture,
   inferShot as inferShotFromSchema,
 } from './lib/story_schema.mjs';
+import { buildSrt, hookTitleWords } from './lib/subtitles.mjs';
 
 const storiesPath = './stories.json';
 const publicDir = './public';
 const MIN_IMAGE_BYTES = 8000;
 const MIN_PNG_BYTES = 3000;
-const TITLE_FRAMES = 60;
+const TITLE_FRAMES = 0;
 const END_FRAMES = 150;
 const OVERLAP_FRAMES = 12;
 const MIN_STORY_SEC = 180;
@@ -31,6 +30,8 @@ const POSE_PROMPTS = {
 
 const PROMPT_BAN =
   'Absolutely no text, no letters, no typography, no captions, no subtitles, no watermarks, no logos, no signatures, no UI, no numbers, no writing of any kind. Blank unmarked papers, signs and screens only.';
+const NO_TEXT_TAIL = ', no readable text, no letters, no words, no watermark, blurry handwriting';
+const KEN_BURNS = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right'];
 
 function writeOutput(name, value) {
   if (!process.env.GITHUB_OUTPUT) return;
@@ -256,7 +257,7 @@ async function tryGeminiImage(prompt, destPath) {
             contents: [
               {
                 role: 'user',
-                parts: [{ text: `${prompt}\n${PROMPT_BAN}` }],
+                parts: [{ text: `${prompt}\n${PROMPT_BAN}${NO_TEXT_TAIL}` }],
               },
             ],
             generationConfig: {
@@ -360,6 +361,63 @@ async function createBackgroundImage(prompt, destPath, seed) {
   }
 }
 
+
+async function ensureBackgroundMusic(bgmPath, generatedPath) {
+  const isUsable = (file) => fs.existsSync(file) && fs.statSync(file).size > 20000;
+  const validate = (file) => {
+    try {
+      const kind = execFileSync(
+        'ffprobe',
+        ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_type', '-of', 'default=noprint_wrappers=1:nokey=1', file],
+        { encoding: 'utf-8' },
+      );
+      return kind.toLowerCase().includes('audio');
+    } catch {
+      return false;
+    }
+  };
+
+  if (isUsable(bgmPath) && validate(bgmPath)) {
+    console.log('Using existing public/bgm.mp3');
+    return 'bgm.mp3';
+  }
+
+  const urls = String(process.env.BGM_URL || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  // Optional extra CC0/public-domain URLs. Never use a copyrighted track.
+  for (const url of urls) {
+    try {
+      console.log('Trying royalty-free background music download...');
+      const res = await fetch(url, { headers: { 'User-Agent': 'animation-factory/1.0' } });
+      if (!res.ok) {
+        console.log(`BGM download failed with HTTP ${res.status}`);
+        continue;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 20000) continue;
+      fs.writeFileSync(bgmPath, buf);
+      if (validate(bgmPath)) {
+        console.log(`Saved royalty-free public/bgm.mp3 (${buf.length} bytes)`);
+        return 'bgm.mp3';
+      }
+      fs.unlinkSync(bgmPath);
+    } catch (err) {
+      console.log(`BGM download failed (${err.message || String(err)}), trying the next option`);
+    }
+  }
+
+  if (isUsable(generatedPath) && validate(generatedPath)) {
+    fs.copyFileSync(generatedPath, bgmPath);
+    console.log('Using generated CC0 soundtrack as public/bgm.mp3');
+    return 'bgm.mp3';
+  }
+
+  console.log('No background music available; render will continue without a music bed');
+  return '';
+}
+
 function sanitizePrompt(text) {
   let value = String(text || '');
   const replacements = [
@@ -395,18 +453,47 @@ function sanitizePrompt(text) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function buildBackgroundPrompt(story, scene) {
-  const style = story.artStyle || '2D layered paper cutout, hand-cut construction paper, cinematic lighting';
+function cinematicStyle(story) {
+  const raw = String(story.artStyle || '')
+    .replace(/2D layered paper cutout,?/gi, '')
+    .replace(/hand-cut[^.]*?(,|$)/gi, ',')
+    .replace(/visible fibers[^,]*,?/gi, '')
+    .replace(/torn edges,?/gi, '')
+    .replace(/same paper stock[^,]*,?/gi, '')
+    .replace(/locked style,?/gi, '')
+    .replace(/\s+,/g, ',')
+    .replace(/,+/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^,|,$/g, '')
+    .trim();
+  return [
+    'cinematic photoreal film still, anamorphic 35mm, dramatic lighting, atmospheric depth, subtle film grain',
+    raw,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function buildBackgroundPrompt(story, scene, index = 0) {
+  const style = cinematicStyle(story);
   const raw = sanitizePrompt(scene.backgroundPrompt || scene.visualPrompt || '');
+  const hook = index === 0
+    ? 'Opening hook frame, dramatic cinematic wide shot, moody high-contrast lighting, atmospheric haze.'
+    : '';
   return [
     style,
     raw,
+    hook,
     'Empty environment only. No people, no humans, no faces, no figures, no body parts, no portraits, no mannequins.',
-    'Locked art style, same paper stock and palette as the rest of the film.',
+    'Locked color palette and atmosphere in every shot.',
     PROMPT_BAN,
+    NO_TEXT_TAIL,
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildCharacterPrompt(story, character, pose) {
@@ -419,6 +506,7 @@ function buildCharacterPrompt(story, character, pose) {
     'Plain solid chroma-key lime green background (#00FF00), completely flat and even, no floor, no shadow on the backdrop, no scenery, no props, no furniture, no other people.',
     'Clean silhouette, layered paper, visible paper fibers, torn-paper edge quality.',
     PROMPT_BAN,
+    NO_TEXT_TAIL,
   ]
     .filter(Boolean)
     .join(' ');
@@ -653,8 +741,6 @@ function capStoryDuration(processedScenes) {
     fs.renameSync(dest, src);
     const wordsPath = path.join(publicDir, scene.audioFile.replace('audio_', 'words_').replace(/\.mp3$/, '.json'));
     scene.words = wordsToFrames(wordsPath, tempo);
-    const mouthPath = path.join(publicDir, scene.audioFile.replace(/audio_/, 'mouth_').replace('.mp3', '.json'));
-    scene.mouth = makeMouthEnvelope(src, mouthPath);
     const durationSec = audioDurationSeconds(src) + 0.2;
     scene.durationInFrames = Math.max(60, Math.ceil(durationSec * 30));
   }
@@ -694,8 +780,6 @@ writeOutput('story_id', story.id);
 fs.writeFileSync(path.join(publicDir, 'selected_story_id.txt'), `${story.id}\n`);
 
 const voice = story.voice || 'en-GB-RyanNeural';
-const { assets: characterAssets, sources: characterSources, list: characterList } = prepareCharacterRigs(story);
-console.log(`SVG character rigs ready: ${JSON.stringify(characterSources)}`);
 
 const processedScenes = [];
 const sourceCounts = { pollinations: 0, gemini: 0, svg: 0, local: 0 };
@@ -714,18 +798,15 @@ for (let i = 0; i < story.scenes.length; i++) {
   console.log(`Generating voice for scene ${i + 1}/${story.scenes.length}...`);
   await generateVoice(scene.narration, audioPath, wordsPath, voice);
   const durationSec = audioDurationSeconds(audioPath) + 0.22;
-  const mouthFile = `mouth_${i}.json`;
-  const mouthPath = path.join(publicDir, mouthFile);
-  const mouth = makeMouthEnvelope(audioPath, mouthPath);
 
   console.log(`Generating background for scene ${i + 1}/${story.scenes.length}...`);
-  const prompt = buildBackgroundPrompt(story, scene);
+  const prompt = buildBackgroundPrompt(story, scene, i);
   const source = await createBackgroundImage(prompt, imagePath, backgroundSeedBase + i * 19);
   sourceCounts[source] = (sourceCounts[source] || 0) + 1;
   if (source === 'local') fallbackScenes.push(i);
   if (source === 'pollinations' && i < story.scenes.length - 1) await sleep(2200);
 
-  const effect = scene.effect || 'zoom_in';
+  const effect = KEN_BURNS.includes(scene.effect) ? scene.effect : KEN_BURNS[i % KEN_BURNS.length];
   const shot = inferShot(scene);
   processedScenes.push({
     narration: scene.narration,
@@ -735,11 +816,9 @@ for (let i = 0; i < story.scenes.length; i++) {
     audioFile,
     imageFile,
     words: wordsToFrames(wordsPath),
-    mouth,
     particles: scene.particles || inferParticles(`${scene.visualPrompt || ''} ${scene.narration}`),
     sfxFile: inferSfx(effect, i),
     imageSource: source,
-    actors: buildActors(scene, i, characterAssets, characterList),
     durationInFrames: Math.max(60, Math.ceil(durationSec * 30)),
   });
 }
@@ -762,6 +841,31 @@ execFileSync(
   { stdio: ['inherit', 'inherit', 'inherit'] },
 );
 
+const musicFile = await ensureBackgroundMusic(path.join(publicDir, 'bgm.mp3'), path.join(publicDir, 'music.mp3'));
+const grainFile = fs.existsSync(path.join(publicDir, 'grain.jpg')) ? 'grain.jpg' : '';
+
+const captions = buildSrt({
+  scenes: cappedScenes,
+  titleDurationInFrames: TITLE_FRAMES,
+  overlapFrames: OVERLAP_FRAMES,
+  fps: 30,
+});
+fs.writeFileSync(path.join(publicDir, 'captions.srt'), captions);
+fs.mkdirSync('./out', { recursive: true });
+fs.writeFileSync('./out/final_video.srt', captions);
+
+const hookWords = hookTitleWords(cappedScenes[0]?.narration || story.title || '').join(' ');
+const thumbSrc = cappedScenes[0]?.imageFile ? path.join(publicDir, cappedScenes[0].imageFile) : '';
+if (thumbSrc && fs.existsSync(thumbSrc)) {
+  const thumbOut = path.join(publicDir, 'thumbnail.png');
+  execFileSync('python3', ['scripts/make_thumbnail.py', '--image', thumbSrc, '--words', hookWords, '--out', thumbOut], {
+    stdio: ['inherit', 'inherit', 'inherit'],
+  });
+  fs.copyFileSync(thumbOut, './out/thumbnail.png');
+} else {
+  console.log('No hook image available for thumbnail.png');
+}
+
 const manifest = {
   title: story.title,
   description: story.description || '',
@@ -771,13 +875,12 @@ const manifest = {
     .filter(([, count]) => count > 0)
     .map(([name, count]) => `${name}:${count}`)
     .join(','),
-  characterSources,
   fallbackScenes,
   titleDurationInFrames: TITLE_FRAMES,
   endCardDurationInFrames: END_FRAMES,
   overlapFrames: OVERLAP_FRAMES,
-  musicFile: 'music.mp3',
-  grainFile: 'grain.jpg',
+  musicFile,
+  grainFile,
   scenes: cappedScenes,
 };
 
@@ -785,5 +888,5 @@ fs.writeFileSync(path.join(publicDir, 'current_video.json'), `${JSON.stringify(m
 
 const finalSec = estimateStorySeconds(cappedScenes.map((s) => s.durationInFrames / 30));
 console.log(
-  `All assets prepared successfully. Image sources: ${manifest.imageSource || 'none'}. Character sources: ${JSON.stringify(characterSources)}. Estimated length: ${finalSec.toFixed(1)}s. Story will be marked done only after a successful render.`,
+  `All assets prepared successfully. Image sources: ${manifest.imageSource || 'none'}. Music: ${musicFile || 'none'}. Estimated length: ${finalSec.toFixed(1)}s. Story will be marked done only after a successful render.`,
 );
